@@ -8,15 +8,15 @@ which in its turn is based on the [OpenSCAD Parametric Box by FB Aka Heartman/He
 I've fixed a few dimensions,
 and I also modified it to work with the DC jack and the tactile switch with the projected plunger and 4x4 key top that I use.
 
-![MiniMax8085 Case - Top off](printed_parts/MiniMax8085-Case.jpg)
+![MiniMax8085 Case - Top off](MiniMax8085-Case.jpg)
 
 ## 3D Printed Parts
 
-* [Enclosure Bottom](printed_parts/MiniMax8085-Bottom.stl)
-* [Enclosure Back](printed_parts/MiniMax8085-Back.stl)
-* [Enclosure Front](printed_parts/MiniMax8085-Front.stl)
-* [Enclosure Top](printed_parts/MiniMax8085-Top.stl)
-* [OpenSCAD Source Code](printed_parts/MiniMax8085.scad)
+* [Enclosure Bottom](MiniMax8085-Bottom.stl)
+* [Enclosure Back](MiniMax8085-Back.stl)
+* [Enclosure Front](MiniMax8085-Front.stl)
+* [Enclosure Top](MiniMax8085-Top.stl)
+* [OpenSCAD Source Code](MiniMax8085.scad)
 
 ### 3D Printing Recommendations
 
