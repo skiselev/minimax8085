@@ -24,8 +24,8 @@
 ; SECTION.  THEY CAN BE REACHED ONLY BY 3-BYTE CALLS.
 ; 
 DWA     MACRO WHERE
-        DB   (WHERE SHR 8) + 128
-        DB   WHERE AND 0FFH
+        DB   (WHERE >> 8) + 128
+        DB   WHERE & 0FFH
         ENDM
 ;
         ORG  0H
@@ -56,7 +56,7 @@ CRLF:   MVI  A,CR                       ;*** CRLF ***
         MOV  A,L                        ;Z FLAGS
         CMP  E                          ;BUT OLD A IS LOST
         RET
-        DB   'AN'
+        DB   "AN"
 ;
 SS1:    LDAX D                          ;*** IGNBLK/RST 5 ***
         CPI  20H                        ;IGNORE BLANKS
@@ -147,13 +147,13 @@ TN1:    CPI  30H                        ;IF NOT, RETURN 0 IN
 QHOW:   PUSH D                          ;*** ERROR "HOW?" ***
 AHOW:   LXI  D,HOW
         JMP  ERROR
-HOW:    DB   'HOW?'
+HOW:    DB   "HOW?"
         DB   CR
-OK:     DB   'OK'
+OK:     DB   "OK"
         DB   CR
-WHAT:   DB   'WHAT?'
+WHAT:   DB   "WHAT?"
         DB   CR
-SORRY:  DB   'SORRY'
+SORRY:  DB   "SORRY"
         DB   CR
 ;
 ;*************************************************************
@@ -1111,10 +1111,10 @@ GL1:    CALL CHKIO                      ;CHECK KEYBOARD
         CPI  0DH                        ;WAS IT CR?
         RZ                              ;YES, END OF LINE
         MOV  A,E                        ;ELSE MORE FREE ROOM?
-        CPI  BUFEND AND 0FFH
+        CPI  BUFEND & 0FFH
         JNZ  GL1                        ;YES, GET NEXT INPUT
 GL3:    MOV  A,E                        ;DELETE LAST CHARACTER
-        CPI  BUFFER AND 0FFH            ;BUT DO WE HAVE ANY?
+        CPI  BUFFER & 0FFH              ;BUT DO WE HAVE ANY?
         JZ   GL4                        ;NO, REDO WHOLE LINE
         DCX  D                          ;YES, BACKUP POINTER
         MVI  A,5CH                      ;AND ECHO A BACK-SLASH
@@ -1369,10 +1369,10 @@ PU1:    PUSH H
 ;       LDA  OCSW                       ;CHECK SOFTWARE SWITCH
 ;       ORA  A
 INIT:   STA  OCSW
-        MVI  A,3                        ;RESET ACIA
-        OUT  16
-        MVI  A,15H			;15H FOR 8N1, 11H FOR 8N2
-        OUT  16
+        MVI  A,0CFH
+        OUT  0FBH
+        MVI  A,27H
+        OUT  0FBH
         MVI  D,19H
 PATLOP:
         CALL CRLF
@@ -1389,11 +1389,11 @@ PATLOP:
 OC2:    JNZ  OC3                        ;IT IS ON
         POP  PSW                        ;IT IS OFF
         RET                             ;RESTORE AF AND RETURN
-OC3:    IN   16                         ;COME HERE TO DO OUTPUT
-        ANI  2H                         ;STATUS BIT
+OC3:    IN   0FBH                       ;COME HERE TO DO OUTPUT
+        ANI  1H                         ;STATUS BIT
         JZ   OC3                        ;NOT READY, WAIT
         POP  PSW                        ;READY, GET OLD A BACK
-        OUT  17                         ;AND SEND IT OUT
+        OUT  0FAH                       ;AND SEND IT OUT
         CPI  CR                         ;WAS IT CR?
         RNZ                             ;NO, FINISHED
         MVI  A,LF                       ;YES, WE SEND LF TOO
@@ -1401,11 +1401,11 @@ OC3:    IN   16                         ;COME HERE TO DO OUTPUT
         MVI  A,CR                       ;GET CR BACK IN A
         RET
 ;
-CHKIO:  IN   16                         ;*** CHKIO ***
+CHKIO:  IN   0FBH                       ;*** CHKIO ***
         NOP                             ;STATUS BIT FLIPPED?
-        ANI  1H                         ;MASK STATUS BIT
+        ANI  2H                         ;MASK STATUS BIT
         RZ                              ;NOT READY, RETURN "Z"
-        IN   17                         ;READY, READ DATA
+        IN   0FAH                       ;READY, READ DATA
         ANI  7FH                        ;MASK BIT 7 OFF
         CPI  0FH                        ;IS IT CONTROL-O?
         JNZ  CI1                        ;NO, MORE CHECKING
@@ -1417,8 +1417,8 @@ CI1:    CPI  3H                         ;IS IT CONTROL-C?
         RNZ                             ;NO, RETURN "NZ"
         JMP  RSTART                     ;YES, RESTART TBI
 ;
-MSG1:   DB   'TINY '
-        DB   'BASIC'
+MSG1:   DB   "TINY "
+        DB   "BASIC"
         DB   CR
 ;
 ;*************************************************************
@@ -1448,69 +1448,69 @@ MSG1:   DB   'TINY '
 ; MATCH THIS NULL ITEM AS DEFAULT.
 ;
 TAB1:                                   ;DIRECT COMMANDS
-        DB   'LIST'
+        DB   "LIST"
         DWA  LIST
-        DB   'RUN'
+        DB   "RUN"
         DWA  RUN
-        DB   'NEW'
+        DB   "NEW"
         DWA  NEW
 ;
 TAB2:                                   ;DIRECT/STATEMENT
-        DB   'NEXT'
+        DB   "NEXT"
         DWA  NEXT
-        DB   'LET'
+        DB   "LET"
         DWA  LET
-        DB   'IF'
+        DB   "IF"
         DWA  IFF
-        DB   'GOTO'
+        DB   "GOTO"
         DWA  GOTO
-        DB   'GOSUB'
+        DB   "GOSUB"
         DWA  GOSUB
-        DB   'RETURN'
+        DB   "RETURN"
         DWA  RETURN
-        DB   'REM'
+        DB   "REM"
         DWA  REM
-        DB   'FOR'
+        DB   "FOR"
         DWA  FOR
-        DB   'INPUT'
+        DB   "INPUT"
         DWA  INPUT
-        DB   'PRINT'
+        DB   "PRINT"
         DWA  PRINT
-        DB   'STOP'
+        DB   "STOP"
         DWA  STOP
         DWA  DEFLT
 ;
 TAB4:                                   ;FUNCTIONS
-        DB   'RND'
+        DB   "RND"
         DWA  RND
-        DB   'ABS'
+        DB   "ABS"
         DWA  ABS
-        DB   'SIZE'
+        DB   "SIZE"
         DWA  SIZE
         DWA  XP40
 ;
 TAB5:                                   ;"TO" IN "FOR"
-        DB   'TO'
+        DB   "TO"
         DWA  FR1
         DWA  QWHAT
 ;
 TAB6:                                   ;"STEP" IN "FOR"
-        DB   'STEP'
+        DB   "STEP"
         DWA  FR2
         DWA  FR3
 ;
 TAB8:                                   ;RELATION OPERATORS
-        DB   '>='
+        DB   ">="
         DWA  XP11
-        DB   '#'
+        DB   "#"
         DWA  XP12
-        DB   '>'
+        DB   ">"
         DWA  XP13
-        DB   '='
+        DB   "="
         DWA  XP15
-        DB   '<='
+        DB   "<="
         DWA  XP14
-        DB   '<'
+        DB   "<"
         DWA  XP16
         DWA  XP17
 ;
@@ -1549,8 +1549,7 @@ EX5:    MOV  A,M                        ;LOAD HL WITH THE JUMP
         PCHL                            ;AND WE GO DO IT
 ;
 LSTROM:                                 ;ALL ABOVE CAN BE ROM
-;       ORG  1000H                      ;HERE DOWN MUST BE RAM
-        ORG  0800H
+        ORG  1000H                      ;HERE DOWN MUST BE RAM
 OCSW:   DS   1                          ;SWITCH FOR OUTPUT
 CURRNT: DS   2                          ;POINTS TO CURRENT LINE
 STKGOS: DS   2                          ;SAVES SP IN 'GOSUB'
@@ -1564,15 +1563,13 @@ LOPPT:  DS   2                          ;TEXT POINTER
 RANPNT: DS   2                          ;RANDOM NUMBER POINTER
 TXTUNF: DS   2                          ;->UNFILLED TEXT AREA
 TXTBGN: DS   2                          ;TEXT SAVE AREA BEGINS
-;       ORG  1366H
-        ORG  1F00H
+        ORG  1366H
 TXTEND: DS   0                          ;TEXT SAVE AREA ENDS
 VARBGN: DS   55                         ;VARIABLE @(0)
 BUFFER: DS   64                         ;INPUT BUFFER
 BUFEND: DS   1                          ;BUFFER ENDS
 STKLMT: DS   1                          ;TOP LIMIT FOR STACK
-;       ORG  1400H
-        ORG  2000H
+        ORG  1400H
 STACK:  DS   0                          ;STACK STARTS HERE
 ;
 CR      EQU  0DH
