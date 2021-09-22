@@ -1,0 +1,2150 @@
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 1 - 1/25/2012 21:31:36
+
+
+       1/       0 :                     ;
+       2/       0 :                     ; MON85: A software debugger for the 8080/8085 processor
+       3/       0 :                     ;
+       4/       0 :                     ; Copyright 1979-2007 Dave Dunfield
+       5/       0 :                     ; All rights reserved.
+       6/       0 :                     ;
+       7/       0 :                     ; Version 1.2 - 2012 Roman Borik
+       8/       0 :                     ;
+       9/       0 :                     ; New in version 1.2
+      10/       0 :                     ; - Support for undocumented 8085 instructions.
+      11/       0 :                     ;   DSUB B, ARHL, RDEL, LDHI d8, LDSI d8, LHLX D, SHLX D, JNK a16, JK a16, RSTV
+      12/       0 :                     ; - Command R displays all flags of F register (SZKA3PVC). If flag is not set
+      13/       0 :                     ;   dash '-' is displayed.
+      14/       0 :                     ; - Added restart vector RST 8 (0040h) for possibility to handle RSTV call.
+      15/       0 :                     ; - Changed TRACE mode. After entering TRACE mode, instruction on actual PC and
+      16/       0 :                     ;   content of registers (if it is switched on) are displayed.
+      17/       0 :                     ;   Entering a space ' ' executes this instruction, and returns to the 'T>'
+      18/       0 :                     ;   prompt with the next instruction.
+      19/       0 :                     ; - Instructions LXI, DAD, INX, DCX displays argument 'SP' rather than 'S'.
+      20/       0 :                     ; - Commands that requires 1 byte parameter raises error if entered value
+      21/       0 :                     ;   not fit to 1 byte.
+      22/       0 :                     ; - Command 'C' checks overlap of source and destination block and for copying
+      23/       0 :                     ;   uses appropriate direction.
+      24/       0 :                     ; - Command 'F' checks <start> and <end> parameters and raises error,
+      25/       0 :                     ;   if <end> is lower than <start>.
+      26/       0 :                     ; - Added command 'H' to send out memory content in Intel HEX format.
+      27/       0 :                     ; - Sending of LF and CR characters were reversed and are sent in the usual
+      28/       0 :                     ;   order - CR first and followed by LF.
+      29/       0 :                     
+      30/       0 :                     
+      31/       0 : =0H                 ROM	EQU	0000h		; Debugger goes here
+      32/       0 : =FFA0H              DRAM	EQU	0FFA0h		; Debugger RAM (96 bytes required)
+      33/       0 :                     
+      34/       0 :                     ;
+      35/       0 :                     ; Debugger data area (in RAM)
+      36/       0 :                     ;
+      37/    FFA0 :                     	ORG	DRAM		; Monitor data goes here
+      38/    FFA0 :                     ;
+      39/    FFA0 :                     UBASE:	DS	2		; Base address of user program
+      40/    FFA2 :                     HL:	DS	2		; Saved HL register pair
+      41/    FFA4 :                     DE:	DS	2		; Saved DE register pair
+      42/    FFA6 :                     BC:	DS	2		; Saved BC register pair
+      43/    FFA8 :                     PSW:	DS	2		; Saved PSW (A + CC)
+      44/    FFAA :                     SP:	DS	2		; Saved Stack Pointer
+      45/    FFAC :                     PC:	DS	2		; Saved Program Counter
+      46/    FFAE :                     OFLAG:	DS	1		; Output suspended flag
+      47/    FFAF :                     TFLAG:	DS	1		; Flag to enable TRACING
+      48/    FFB0 :                     SFLAG:	DS	1		; Flag to enable SUBROUTINE tracing
+      49/    FFB1 :                     AFLAG:	DS	1		; Flag to enable AUTO REGISTER DISPLAY
+      50/    FFB2 :                     BRKTAB:	DS	24		; Breakpoint table
+      51/    FFCA :                     INST:	DS	6		; Save area for "faking" instructions
+      52/    FFD0 :                     BUFFER:	DS	48		; Input/temp buffer & stack
+      53/   10000 : =0H                 DSTACK	EQU	$&0FFFFh	; Debugger stack
+      54/   10000 :                     ;
+      55/   10000 :                     ; Startup code... Kick off the monitor
+      56/   10000 :                     ;
+      57/       0 :                     	ORG	ROM		; Debugger code goes here
+      58/       0 :                     ;
+      59/       0 : 31 00 00            	LXI	SP,DSTACK	; Set up initial stack pointer
+      60/       3 : C3 0B 01            	JMP	TEST		; Execute main program
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 2 - 1/25/2012 21:31:36
+
+
+      61/       6 :                     	DS	2		; Filler bytes to first int
+      62/       8 :                     ;
+      63/       8 :                     ; Interrupt handlers for RESTART interrupts
+      64/       8 :                     ;
+      65/       8 :                     ; Although they RST 1.5, 2.5 and 3.5 vectors are not used by the
+      66/       8 :                     ; 8085 hardware,  they are included since the space must contain
+      67/       8 :                     ; SOMETHING,  and who knows,  perhaps someone uses them for jump
+      68/       8 :                     ; table addresses etc...
+      69/       8 :                     ;
+      70/       8 :                     ; Restart 1 is the entry point for breakpoints
+      71/       8 : C3 5A 00            RST1:	JMP	ENTRY		; Execute handler
+      72/       B :                     	DS	1		; Filler to next int
+      73/       C : CD 44 00            RST15:	CALL	RSTINT		; Invoke interrupt
+      74/       F : 0C                  	DB	12		; Offset to handler
+      75/      10 : CD 44 00            RST2:	CALL	RSTINT		; Invoke interrupt
+      76/      13 : 10                  	DB	16		; Offset to handler
+      77/      14 : CD 44 00            RST25:	CALL	RSTINT		; Invoke interrupt
+      78/      17 : 14                  	DB	20		; Offset to handler
+      79/      18 : CD 44 00            RST3:	CALL	RSTINT		; Invoke interrupt
+      80/      1B : 18                  	DB	24		; Offset to handler
+      81/      1C : CD 44 00            RST35:	CALL	RSTINT		; Invoke interrupt
+      82/      1F : 1C                  	DB	28		; Offset to handler
+      83/      20 : CD 44 00            RST4:	CALL	RSTINT		; Invoke interrupt
+      84/      23 : 20                  	DB	32		; Offset to handler
+      85/      24 : CD 44 00            TRAP:	CALL	RSTINT		; Invoke interrupt
+      86/      27 : 24                  	DB	36		; Offset to handler
+      87/      28 : CD 44 00            RST5:	CALL	RSTINT		; Invoke interrupt
+      88/      2B : 28                  	DB	40		; Offset to handler
+      89/      2C : CD 44 00            RST55:	CALL	RSTINT		; Invoke interrupt
+      90/      2F : 2C                  	DB	44		; Offset to handler
+      91/      30 : CD 44 00            RST6:	CALL	RSTINT		; Invoke interrupt
+      92/      33 : 30                  	DB	48		; Offset to handler
+      93/      34 : CD 44 00            RST65:	CALL	RSTINT		; Invoke interrupt
+      94/      37 : 34                  	DB	52		; Offset to handler
+      95/      38 : CD 44 00            RST7:	CALL	RSTINT		; Invoke interrupt
+      96/      3B : 38                  	DB	56		; Offset to handler
+      97/      3C : CD 44 00            RST75:	CALL	RSTINT		; Invoke interrupt
+      98/      3F : 3C                  	DB	60		; Offset to handler
+      99/      40 : CD 44 00            RST8:	CALL	RSTINT		; Invoke interrupt
+     100/      43 : 40                  	DB	64		; Offset to handler
+     101/      44 :                     ;
+     102/      44 :                     ; Process a RESTART interrupt, get offset & vector to code
+     103/      44 :                     ; To speed processing, it is assumed that the user program
+     104/      44 :                     ; base address begins on a 256 byte page boundary.
+     105/      44 :                     ;
+     106/      44 : E3                  RSTINT:	XTHL			; Save HL, Get PTR to offset
+     107/      45 : F5                  	PUSH	PSW		; Save A and CC
+     108/      46 : 7E                  	MOV	A,M		; Get offset
+     109/      47 : 2A A0 FF            	LHLD	UBASE		; Get high of user program
+     110/      4A : 6F                  	MOV	L,A		; Set low address
+     111/      4B : F1                  	POP	PSW		; Restore A & CC
+     112/      4C : E3                  	XTHL			; Restore HL, set 
+     113/      4D : C9                  	RET			; Vector to interrupt
+     114/      4E :                     ;
+     115/      4E :                     ; Register -> text translation tables used by the disassembler. These tables
+     116/      4E :                     ; go here (near beginning) so that we can be sure the high address will not
+     117/      4E :                     ; cross a page boundary allowing us to index by modifying low address only.
+     118/      4E :                     ;
+     119/      4E : 42 43 44 45 48 4C   RTAB:	DB	"BCDEHLMA"	; Table of register names
+                    4D 41 
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 3 - 1/25/2012 21:31:36
+
+
+     120/      56 : 42 44 48 53         RPTAB:	DB	"BDHS"		; Table of register pairs
+     121/      5A :                     ;
+     122/      5A :                     ; Entry point for breakpoints & program tracing
+     123/      5A :                     ;
+     124/      5A :                     ; Save the user program registers
+     125/      5A : 22 A2 FF            ENTRY:	SHLD	HL		; Save HL
+     126/      5D : EB                  	XCHG			; Get DE
+     127/      5E : 22 A4 FF            	SHLD	DE		; Save DE
+     128/      61 : E1                  	POP	H		; Get RET addrss
+     129/      62 : 22 AC FF            	SHLD	PC		; Save PC
+     130/      65 : C5                  	PUSH	B		; Copy BC
+     131/      66 : E1                  	POP	H		; And get it
+     132/      67 : 22 A6 FF            	SHLD	BC		; Save PC
+     133/      6A : F5                  	PUSH	PSW		; Copy PSW
+     134/      6B : E1                  	POP	H		; And get it
+     135/      6C : 22 A8 FF            	SHLD	PSW		; Save PSW
+     136/      6F : 21 00 00            	LXI	H,0		; Start with zero
+     137/      72 : 39                  	DAD	SP		; Get SP
+     138/      73 : 22 AA FF            	SHLD	SP		; Save SP
+     139/      76 : 31 00 00            	LXI	SP,DSTACK	; Move to our stack
+     140/      79 : 2A AC FF            	LHLD	PC		; Get RET addrss
+     141/      7C : 2B                  	DCX	H		; Backup to actual instruction
+     142/      7D : 22 AC FF            	SHLD	PC		; Save PC
+     143/      80 : 11 B2 FF            	LXI	D,BRKTAB	; Point to breakpoint table
+     144/      83 : 06 30               	MVI	B,'0'		; Assume breakpoint #0
+     145/      85 :                     ; Search breakpoint table & see if this is a breakpoint
+     146/      85 : 1A                  TRYBRK:	LDAX	D		; Get HIGH byte from table
+     147/      86 : 13                  	INX	D		; Advance
+     148/      87 : BC                  	CMP	H		; Does it match?
+     149/      88 : 1A                  	LDAX	D		; Get LOW byte from table
+     150/      89 : 13                  	INX	D		; Advance
+     151/      8A : C2 91 00            	JNZ	NOTBRK		; No, try next
+     152/      8D : BD                  	CMP	L		; Does it match?
+     153/      8E : CA 9C 00            	JZ	FOUND		; Yes, we have an entry
+     154/      91 : 13                  NOTBRK:	INX	D		; Skip saved code byte
+     155/      92 : 04                  	INR	B		; Advance breakpoint number
+     156/      93 : 78                  	MOV	A,B		; Get breakpoint number
+     157/      94 : FE 38               	CPI	'0'+8		; Table exausted
+     158/      96 : DA 85 00            	JC	TRYBRK		; No, keep looking
+     159/      99 :                     ; This interrupt is NOT a breakpoint
+     160/      99 : C3 B5 00            	JMP	NOBK		; Enter with no breakpoint
+     161/      9C :                     ; This interrupt is a breakpoint, display the message
+     162/      9C : CD 58 0F            FOUND:	CALL	PRTMSG		; Output message
+     163/      9F : 2A 2A 20 42 72 65   	DB	"** Breakpoint ",0
+                    61 6B 70 6F 69 6E 
+                    74 20 00 
+     164/      AE : 78                  	MOV	A,B		; Get breakpoint number
+     165/      AF : CD AA 0F            	CALL	OUT		; Output it
+     166/      B2 : CD A3 0F            	CALL	CRLF		; New line
+     167/      B5 :                     ; Reenter monitor, first, restore all breakpoint opcodes
+     168/      B5 : 21 B2 FF            NOBK:	LXI	H,BRKTAB	; Point to breakpoint table
+     169/      B8 : 06 08               	MVI	B,8		; 8 breakpoints
+     170/      BA : 56                  FIXL:	MOV	D,M		; Get HIGH address
+     171/      BB : 23                  	INX	H		; Advance
+     172/      BC : 5E                  	MOV	E,M		; Get LOW address
+     173/      BD : 23                  	INX	H		; Advance
+     174/      BE : 7A                  	MOV	A,D		; Get high
+     175/      BF : B3                  	ORA	E		; Test for ZERO
+     176/      C0 : CA C5 00            	JZ	NOFIX		; Breakpoint is not set
+     177/      C3 : 7E                  	MOV	A,M		; Get opcode
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 4 - 1/25/2012 21:31:36
+
+
+     178/      C4 : 12                  	STAX	D		; And patch user code
+     179/      C5 : 23                  NOFIX:	INX	H		; Skip opcode
+     180/      C6 : 05                  	DCR	B		; Reduce count
+     181/      C7 : C2 BA 00            	JNZ	FIXL		; Not finished, keep going
+     182/      CA : 3A AF FF            	LDA	TFLAG		; Get trace mode flag
+     183/      CD : A7                  	ANA	A		; Is it enabled?
+     184/      CE : C2 DB 00            	JNZ	TRTB		; Yes, enter trace mode
+     185/      D1 : 3A B1 FF            	LDA	AFLAG		; Get auto register display flag
+     186/      D4 : A7                  	ANA	A		; Is it enabled?
+     187/      D5 : C4 13 08            	CNZ	REGDIS		; Yes, display the registers
+     188/      D8 : C3 8D 01            	JMP	REST		; Enter monitor
+     189/      DB :                     ; Prompt for and handle trace mode commands
+     190/      DB : CD 58 0F            TRTB:	CALL	PRTMSG		; Output message
+     191/      DE : 54 3E 20 00         	DB	"T> ",0		; Trace mode prompt
+     192/      E2 : 2A AC FF            	LHLD	PC		; Get PC
+     193/      E5 : EB                  	XCHG			; Move to DE
+     194/      E6 : CD AA 08            	CALL	DINST		; Disassemble the instruction
+     195/      E9 : CD A3 0F            	CALL	CRLF		; New line
+     196/      EC : 3A B1 FF            	LDA	AFLAG		; Get auto register display flag
+     197/      EF : A7                  	ANA	A		; Is it enabled?
+     198/      F0 : C4 13 08            	CNZ	REGDIS		; Yes, display the registers
+     199/      F3 : CD 38 0F            TRL:	CALL	INCHR		; Get a command character
+     200/      F6 : FE 20               	CPI	' '		; Execute command?
+     201/      F8 : CA 0A 03            	JZ	NOADR		; Yes, handle it
+     202/      FB : FE 1B               	CPI	1Bh		; ESCAPE?
+     203/      FD : CA 8A 01            	JZ	RECR		; Yes, abort
+     204/     100 : FE 3F               	CPI	'?'		; Register display?
+     205/     102 : C2 F3 00            	JNZ	TRL		; No, ignore it
+     206/     105 : CD 13 08            	CALL	REGDIS		; Display the registers
+     207/     108 : C3 DB 00            	JMP	TRTB		; And go again
+     208/     10B :                     ;
+     209/     10B :                     ; Main entry point for the 8080 debugger
+     210/     10B :                     ;
+     211/     10B : CD BD 0F            TEST:	CALL	INIT		; Set up hardware
+     212/     10E : CD 58 0F            	CALL	PRTMSG		; Output herald message
+     213/     111 : 0D 0A               	DB	0Dh,0Ah
+     214/     113 : 4D 4F 4E 38 35 20   	DB	"MON85 Version 1.2"
+                    56 65 72 73 69 6F 
+                    6E 20 31 2E 32 
+     215/     124 : 0D 0A 0A            	DB	0Dh,0Ah,0Ah
+     216/     127 : 43 6F 70 79 72 69   	DB	"Copyright 1979-2007 Dave Dunfield"
+                    67 68 74 20 31 39 
+                    37 39 2D 32 30 30 
+                    37 20 44 61 76 65 
+                    20 44 75 6E 66 69 
+                    65 6C 64 
+     217/     148 : 0D 0A               	DB	0Dh,0Ah
+     218/     14A : 32 30 31 32 20 52   	DB	"2012 Roman Borik"
+                    6F 6D 61 6E 20 42 
+                    6F 72 69 6B 
+     219/     15A : 0D 0A               	DB	0Dh,0Ah
+     220/     15C : 41 6C 6C 20 72 69   	DB	"All rights reserved."
+                    67 68 74 73 20 72 
+                    65 73 65 72 76 65 
+                    64 2E 
+     221/     170 : 0A 00               	DB	0Ah,0
+     222/     172 : 21 A0 FF            	LXI	H,UBASE		; Point to start of reserved RAM
+     223/     175 : 0E 60               	MVI	C,(DSTACK-UBASE)&0FFh ; Number of bytes to zero
+     224/     177 : 36 00               INIL1:	MVI	M,0		; Clear a byte
+     225/     179 : 23                  	INX	H		; Advance
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 5 - 1/25/2012 21:31:36
+
+
+     226/     17A : 0D                  	DCR	C		; Reduce count
+     227/     17B : C2 77 01            	JNZ	INIL1		; Clear em all
+     228/     17E : 21 FF FF            	LXI	H,0FFFFh	; Set flags
+     229/     181 : 22 B0 FF            	SHLD	SFLAG		; Turn on SUBTRACE & AUTOREG
+     230/     184 : 21 A0 FF            	LXI	H,UBASE		; Default user stack (below monitor RAM)
+     231/     187 : 22 AA FF            	SHLD	SP		; Set user SP
+     232/     18A :                     ; Newline and prompt for command
+     233/     18A : CD A3 0F            RECR:	CALL	CRLF		; Output a newline
+     234/     18D :                     ; Prompt for an input command
+     235/     18D : 31 00 00            REST:	LXI	SP,DSTACK	; Reset stack pointer
+     236/     190 : CD 58 0F            	CALL	PRTMSG		; Output message
+     237/     193 : 43 3E 20 00         	DB	"C> ",0		; Command prompt
+     238/     197 : CD 67 07            	CALL	INPT		; Get command character
+     239/     19A :                     ; Look up command in table
+     240/     19A : 47                  	MOV	B,A		; Save for later
+     241/     19B : 21 BB 01            	LXI	H,CTABLE	; Point to command table
+     242/     19E : 7E                  REST1:	MOV	A,M		; Get char
+     243/     19F : 23                  	INX	H		; Advance
+     244/     1A0 : B8                  	CMP	B		; Do it match?
+     245/     1A1 : CA B2 01            	JZ	REST2		; Yes, go for it
+     246/     1A4 : 23                  	INX	H		; Skip HIGH address
+     247/     1A5 : 23                  	INX	H		; Skip LOW address
+     248/     1A6 : A7                  	ANA	A		; end of table?
+     249/     1A7 : C2 9E 01            	JNZ	REST1		; Its OK
+     250/     1AA :                     ; Error has occured, issue message & return for command
+     251/     1AA : 3E 3F               ERROR:	MVI	A,'?'		; Error indicator
+     252/     1AC : CD AA 0F            	CALL	OUT		; Display
+     253/     1AF : C3 8A 01            	JMP	RECR		; And wait for command
+     254/     1B2 :                     ; We have command, execute it
+     255/     1B2 : 13                  REST2:	INX	D		; Skip command character
+     256/     1B3 : 7E                  	MOV	A,M		; Get low address
+     257/     1B4 : 23                  	INX	H		; Skip to next
+     258/     1B5 : 66                  	MOV	H,M		; Get HIGH address
+     259/     1B6 : 6F                  	MOV	L,A		; Set LOW
+     260/     1B7 : CD B0 07            	CALL	SKIP		; Set 'Z' of no operands
+     261/     1BA : E9                  	PCHL			; And execute
+     262/     1BB :                     ; Table of commands to execute
+     263/     1BB : 41                  CTABLE:	DB	'A'		; Set AUTOREG flag
+     264/     1BC : BD 04               	DW	AUTO
+     265/     1BE : 42                  	DB	'B'		; Set/Display breakpoint
+     266/     1BF : 5E 02               	DW	SETBRK
+     267/     1C1 : 43                  	DB	'C'		; Copy memory
+     268/     1C2 : 42 05               	DW	COPY
+     269/     1C4 : 44                  	DB	'D'		; Disassemble
+     270/     1C5 : BD 05               	DW	GODIS
+     271/     1C7 : 45                  	DB	'E'		; Edit memory
+     272/     1C8 : D8 04               	DW	EDIT
+     273/     1CA : 46                  	DB	'F'		; Fill memory
+     274/     1CB : 1C 05               	DW	FILL
+     275/     1CD : 47                  	DB	'G'		; Go (begin execution)
+     276/     1CE : FA 02               	DW	GO
+     277/     1D0 : 48                  	DB	'H'		; Send out memory as Intel HEX
+     278/     1D1 : ED 05               	DW	SNDHEX
+     279/     1D3 : 49                  	DB	'I'		; Input from port
+     280/     1D4 : 29 02               	DW	INPUT
+     281/     1D6 : 4C                  	DB	'L'		; Load from serial port
+     282/     1D7 : 61 06               	DW	LOAD
+     283/     1D9 : 4D                  	DB	'M'		; Memory display
+     284/     1DA : 7B 05               	DW	MEMRY
+     285/     1DC : 4F                  	DB	'O'		; Output to port
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 6 - 1/25/2012 21:31:36
+
+
+     286/     1DD : 48 02               	DW	OUTPUT
+     287/     1DF : 52                  	DB	'R'		; Set/Display Registers
+     288/     1E0 : 40 04               	DW	REGIST
+     289/     1E2 : 53                  	DB	'S'		; Set SUBTRACE flag
+     290/     1E3 : C6 04               	DW	SUBON
+     291/     1E5 : 54                  	DB	'T'		; Set TRACE mode
+     292/     1E6 : CF 04               	DW	TRACE
+     293/     1E8 : 55                  	DB	'U'		; Set/Display user base
+     294/     1E9 : CF 05               	DW	USRBASE
+     295/     1EB : 3F                  	DB	'?'		; Help command
+     296/     1EC : F1 01               	DW	HELP
+     297/     1EE : 00                  	DB	0		; End of table
+     298/     1EF : 8D 01               	DW	REST		; Handle NULL command
+     299/     1F1 :                     ;
+     300/     1F1 :                     ; Help command
+     301/     1F1 :                     ;
+     302/     1F1 : 21 BB 0C            HELP:	LXI	H,HTEXT		; Point to help text
+     303/     1F4 : 97                  	SUB	A		; Get a zero
+     304/     1F5 : 32 AE FF            	STA	OFLAG		; Clear the output flag
+     305/     1F8 :                     ; Output each line
+     306/     1F8 : 0E 19               HELP1:	MVI	C,25		; Column counter
+     307/     1FA : 7E                  HELP2:	MOV	A,M		; Get character
+     308/     1FB : 23                  	INX	H		; Advance to next
+     309/     1FC : A7                  	ANA	A		; End of line?
+     310/     1FD : CA 1E 02            	JZ	HELP4		; Yes, terminate
+     311/     200 : FE 21               	CPI	'!'		; Separator?
+     312/     202 : CA 0C 02            	JZ	HELP3		; Yes, output
+     313/     205 : CD AA 0F            	CALL	OUT		; Write character
+     314/     208 : 0D                  	DCR	C		; Reduce count
+     315/     209 : C3 FA 01            	JMP	HELP2		; Keep going
+     316/     20C :                     ; Fill with spaces to discription column
+     317/     20C : CD 9B 08            HELP3:	CALL	SPACE		; Output a space
+     318/     20F : 0D                  	DCR	C		; Reduce count
+     319/     210 : C2 0C 02            	JNZ	HELP3		; Do them all
+     320/     213 : 3E 2D               	MVI	A,'-'		; Spperator
+     321/     215 : CD AA 0F            	CALL	OUT		; Display
+     322/     218 : CD 9B 08            	CALL	SPACE		; And space over
+     323/     21B : C3 FA 01            	JMP	HELP2		; Output rest of line
+     324/     21E :                     ; End of line encountered...
+     325/     21E : CD 67 0F            HELP4:	CALL	CHKSUS		; New line
+     326/     221 : 7E                  	MOV	A,M		; Get next byte
+     327/     222 : A7                  	ANA	A		; End of text?
+     328/     223 : C2 F8 01            	JNZ	HELP1		; Do them all
+     329/     226 : C3 8A 01            	JMP	RECR		; And go home
+     330/     229 :                     ;
+     331/     229 :                     ; Input from port
+     332/     229 :                     ;
+     333/     229 : CD CC 07            INPUT:	CALL	CALC8		; Get port number
+     334/     22C : 3E DB               	MVI	A,0DBh		; 'IN' instruction
+     335/     22E : 26 C9               	MVI	H,0C9h		; 'RET' instruction
+     336/     230 : 32 CA FF            	STA	INST		; Set RAM instruction
+     337/     233 : 22 CB FF            	SHLD	INST+1		; Set RAM instruction
+     338/     236 : CD 58 0F            	CALL	PRTMSG		; Output message
+     339/     239 : 44 41 54 41 3D 00   	DB	"DATA=",0
+     340/     23F : CD CA FF            	CALL	INST		; Perform the read
+     341/     242 : CD 45 0F            	CALL	HPR		; Output it
+     342/     245 : C3 8A 01            	JMP	RECR		; Newline & EXIT
+     343/     248 :                     ;
+     344/     248 :                     ; Output to port
+     345/     248 :                     ;
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 7 - 1/25/2012 21:31:36
+
+
+     346/     248 : CD CC 07            OUTPUT:	CALL	CALC8		; Get port number
+     347/     24B : 3E D3               	MVI	A,0D3h		; 'OUT' instruction
+     348/     24D : 26 C9               	MVI	H,0C9h		; 'RET' instruction
+     349/     24F : 32 CA FF            	STA	INST		; Set RAM instruction
+     350/     252 : 22 CB FF            	SHLD	INST+1		; Set RAM instruction
+     351/     255 : CD CC 07            	CALL	CALC8		; Get data byte
+     352/     258 : CD CA FF            	CALL	INST		; Output the data
+     353/     25B : C3 8D 01            	JMP	REST		; Back to command prompt
+     354/     25E :                     ;
+     355/     25E :                     ; Set breakpoint command
+     356/     25E :                     ;
+     357/     25E : CA 83 02            SETBRK:	JZ	DISBRK		; No operands, display breakpoints
+     358/     261 :                     ; Set a breakpoint
+     359/     261 : CD CC 07            	CALL	CALC8		; Get hex operand
+     360/     264 : FE 08               	CPI	8		; In range?
+     361/     266 : D2 AA 01            	JNC	ERROR		; No, invalud
+     362/     269 : 21 AF FF            	LXI	H,BRKTAB-3	; Point to breakpoint table
+     363/     26C : 01 03 00            	LXI	B,3		; Offset for a breakpoint
+     364/     26F : 09                  SBRLP:	DAD	B		; Advance to next breakpoint
+     365/     270 : 3D                  	DCR	A		; Reduce count
+     366/     271 : F2 6F 02            	JP	SBRLP		; Go until we are there
+     367/     274 : E5                  	PUSH	H		; Save table address
+     368/     275 : CD D6 07            	CALL	CALC		; Get address
+     369/     278 : D1                  	POP	D		; Restore address
+     370/     279 : EB                  	XCHG			; D=brkpt address, H=table address
+     371/     27A : 72                  	MOV	M,D		; Set HIGH address in table
+     372/     27B : 23                  	INX	H		; Advance
+     373/     27C : 73                  	MOV	M,E		; Set LOW address in table
+     374/     27D : 23                  	INX	H		; Advance
+     375/     27E : 1A                  	LDAX	D		; Get opcode from memory
+     376/     27F : 77                  	MOV	M,A		; Save in table
+     377/     280 : C3 8D 01            	JMP	REST		; And get next command
+     378/     283 :                     ; Display breakpoints
+     379/     283 : 11 B2 FF            DISBRK:	LXI	D,BRKTAB	; Point to breakpoint table
+     380/     286 : 06 30               	MVI	B,'0'		; Begin with breakpoint zero
+     381/     288 : 3E 42               DISLP:	MVI	A,'B'		; Lead in character
+     382/     28A : CD AA 0F            	CALL	OUT		; Output
+     383/     28D : 78                  	MOV	A,B		; Get breakpoint number
+     384/     28E : CD AA 0F            	CALL	OUT		; Output
+     385/     291 : 3E 3D               	MVI	A,'='		; Seperator character
+     386/     293 : CD AA 0F            	CALL	OUT		; Output
+     387/     296 : 1A                  	LDAX	D		; Get HIGH address
+     388/     297 : 67                  	MOV	H,A		; Copy
+     389/     298 : 13                  	INX	D		; Advance
+     390/     299 : 1A                  	LDAX	D		; Get LOW address
+     391/     29A : 6F                  	MOV	L,A		; Copy
+     392/     29B : B4                  	ORA	H		; Is breakpoint set?
+     393/     29C : CA A5 02            	JZ	NOTSET		; No, don't display
+     394/     29F : CD 40 0F            	CALL	HLOUT		; Output in hex
+     395/     2A2 : C3 AD 02            	JMP	GIVLF		; And proceed
+     396/     2A5 :                     ; Breakpoint is not set
+     397/     2A5 : CD 58 0F            NOTSET:	CALL	PRTMSG		; Output message
+     398/     2A8 : 2A 2A 2A 2A 00      	DB	"****",0	; Indicate not set
+     399/     2AD : 3E 20               GIVLF:	MVI	A,' '		; Get a space
+     400/     2AF : CD AA 0F            	CALL	OUT		; Output
+     401/     2B2 : CD AA 0F            	CALL	OUT		; Output
+     402/     2B5 : 78                  	MOV	A,B		; Get breakpoint address
+     403/     2B6 : FE 33               	CPI	'0'+3		; Halfway through?
+     404/     2B8 : CC A3 0F            	CZ	CRLF		; Yes, new line
+     405/     2BB : 13                  	INX	D		; Skip low byte
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 8 - 1/25/2012 21:31:36
+
+
+     406/     2BC : 13                  	INX	D		; Skip opcode
+     407/     2BD : 04                  	INR	B		; Advance breakpoint number
+     408/     2BE : 78                  	MOV	A,B		; Get number again
+     409/     2BF : FE 38               	CPI	'0'+8		; All done?
+     410/     2C1 : DA 88 02            	JC	DISLP		; No, keep going
+     411/     2C4 : CD A3 0F            	CALL	CRLF		; New line
+     412/     2C7 : 21 9F 0C            	LXI	H,AUTMSG	; Message for AFLAG
+     413/     2CA : 3A B1 FF            	LDA	AFLAG		; Get flag state
+     414/     2CD : CD E8 02            	CALL	DISON		; Display ON/OFF indication
+     415/     2D0 : 21 A8 0C            	LXI	H,SUBMSG	; Message for SFLAG
+     416/     2D3 : 3A B0 FF            	LDA	SFLAG		; Get flag state
+     417/     2D6 : CD E8 02            	CALL	DISON		; Display ON/OFF indication
+     418/     2D9 : 21 B3 0C            	LXI	H,TRCMSG	; Message for TFLAG
+     419/     2DC : 3A AF FF            	LDA	TFLAG		; Get flag state
+     420/     2DF : CD E8 02            	CALL	DISON		; Display ON/OFF indication
+     421/     2E2 : CD A3 0F            	CALL	CRLF		; New line
+     422/     2E5 : C3 8D 01            	JMP	REST		; Back for another command
+     423/     2E8 :                     ; Display ON/OFF flag state
+     424/     2E8 : F5                  DISON:	PUSH	PSW		; Save A
+     425/     2E9 : CD 5D 0F            	CALL	PRTSTR		; Output message
+     426/     2EC : F1                  	POP	PSW		; Restore A
+     427/     2ED : 21 9B 0C            	LXI	H,OFF		; Assume OFF
+     428/     2F0 : A7                  	ANA	A		; Test A
+     429/     2F1 : CA 5D 0F            	JZ	PRTSTR		; Yes, display OFF
+     430/     2F4 : 21 97 0C            	LXI	H,ON		; Convert to ON
+     431/     2F7 : C3 5D 0F            	JMP	PRTSTR		; And display ON
+     432/     2FA :                     ;
+     433/     2FA :                     ; GO command, Begin program execution
+     434/     2FA :                     ;
+     435/     2FA : CA 03 03            GO:	JZ	NOHEX		; Address not given, assume default
+     436/     2FD : CD D6 07            	CALL	CALC		; Get argument
+     437/     300 : 22 AC FF            	SHLD	PC		; Save new PC value
+     438/     303 : 3A AF FF            NOHEX:	LDA	TFLAG		; Get trace flag
+     439/     306 : A7                  	ANA	A		; Enabled?
+     440/     307 : C2 DB 00            	JNZ	TRTB		; Yes, wait for prompt
+     441/     30A :                     ; Single-step one instruction...
+     442/     30A :                     ; Used for first instruction even when NOT tracing, so
+     443/     30A :                     ; that we can insert breakpoints
+     444/     30A : 97                  NOADR:	SUB	A		; Get NOP
+     445/     30B : 67                  	MOV	H,A		; Set high
+     446/     30C : 6F                  	MOV	L,A		; Set LOW
+     447/     30D : 32 CA FF            	STA	INST		; Set first byte
+     448/     310 : 22 CB FF            	SHLD	INST+1		; Set second & third
+     449/     313 : 2A AC FF            	LHLD	PC		; Get PC
+     450/     316 : EB                  	XCHG			; Set DE to PC
+     451/     317 : CD 37 09            	CALL	LOOK		; Lookup instruction
+     452/     31A : 47                  	MOV	B,A		; Save the TYPE/LENGTH byte
+     453/     31B : E6 03               	ANI	03h		; Mask TYPE, save LENGTH
+     454/     31D : 4F                  	MOV	C,A		; Save for count
+     455/     31E :                     ; Copy instruction into "faking" area
+     456/     31E : 21 CA FF            	LXI	H,INST		; Point to saved instruction
+     457/     321 : 1A                  GOSET:	LDAX	D		; Get byte from code
+     458/     322 : 77                  	MOV	M,A		; Save in instruction
+     459/     323 : 23                  	INX	H		; Advance output
+     460/     324 : 13                  	INX	D		; Advance input
+     461/     325 : 0D                  	DCR	C		; Reduce count
+     462/     326 : C2 21 03            	JNZ	GOSET		; Copy it all
+     463/     329 : EB                  	XCHG			; HL = addrss to execute
+     464/     32A : 3E C3               	MVI	A,0C3h		; Get a JMP instruction
+     465/     32C : 32 CD FF            	STA	INST+3		; Set up a JUMP instruction
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 9 - 1/25/2012 21:31:36
+
+
+     466/     32F : 22 CE FF            	SHLD	INST+4		; Set target address
+     467/     332 : 3A AF FF            	LDA	TFLAG		; Get trace flag
+     468/     335 : A7                  	ANA	A		; Are we tracing?
+     469/     336 : CA 0A 04            	JZ	NOTRC		; No, we are not
+     470/     339 : C5                  	PUSH	B		; Save TYPE/LENGTH
+     471/     33A : 2A CE FF            	LHLD	INST+4		; Get termination address
+     472/     33D : 23                  	INX	H		; Skip this one
+     473/     33E : 22 D0 FF            	SHLD	BUFFER		; Save for "fake" handling
+     474/     341 : 21 38 04            	LXI	H,FAKE		; Point to FAKE routine
+     475/     344 : 22 CE FF            	SHLD	INST+4		; Save new addres
+     476/     347 : C1                  	POP	B		; Restore TYPE/LENGTH
+     477/     348 :                     ; Simulate any control transfer instruction
+     478/     348 : 3A CA FF            	LDA	INST		; Get instruction
+     479/     34B : FE E9               	CPI	0E9h		; Is it PCHL?
+     480/     34D : C2 56 03            	JNZ	NOPCHL		; No, skip
+     481/     350 : 2A A2 FF            	LHLD	HL		; Get user HL value
+     482/     353 : C3 FD 03            	JMP	HLJMP		; And simulate a jump
+     483/     356 : FE CB               NOPCHL:	CPI	0CBh		; Is it RSTV?
+     484/     358 : C2 69 03            	JNZ	NORSTV		; No, skip
+     485/     35B : 3A A8 FF            	LDA	PSW		; Get status flags
+     486/     35E : E6 02               	ANI	2		; Check V flag
+     487/     360 : C2 0A 04            	JNZ	NOTRC		; Is set, execute instruction
+     488/     363 : 32 CA FF            	STA	INST		; Change to NOP
+     489/     366 : C3 0A 04            	JMP	NOTRC		; Not set, execute NOP
+     490/     369 : FE DD               NORSTV:	CPI	0DDh		; Is it JNK?
+     491/     36B : CA 73 03            	JZ	JNKJK		; Yes, go
+     492/     36E : FE FD               	CPI	0FDh		; Is it JK?
+     493/     370 : C2 82 03            	JNZ	NOJNK		; No, skip
+     494/     373 : E6 20               JNKJK:	ANI	20h		; Save K flag from instruction code
+     495/     375 : 4F                  	MOV	C,A
+     496/     376 : 3A A8 FF            	LDA	PSW		; Get status flags
+     497/     379 : E6 20               	ANI	20h		; Save only K flag
+     498/     37B : A9                  	XRA	C		; Compare them
+     499/     37C : CA EC 03            	JZ	NOPSH		; If they are equal, make jump
+     500/     37F : C3 0A 04            	JMP	NOTRC		; No jump 
+     501/     382 : 78                  NOJNK:	MOV	A,B		; Get TYPE back
+     502/     383 : FE 0B               	CPI	0Bh		; Is it a 'JUMP'
+     503/     385 : CA C7 03            	JZ	GOJMP		; Yes, handle it
+     504/     388 : FE 05               	CPI	05h		; Is it a 'RETURN'
+     505/     38A : CA F2 03            	JZ	CALRET		; Yes, handle it
+     506/     38D : E6 F8               	ANI	0F8h		; Save only conditional bits
+     507/     38F : CA 0A 04            	JZ	NOTRC		; Not conditional, always execute instruction
+     508/     392 : E6 08               	ANI	08h		; Does this test require COMPLEMENTED flags
+     509/     394 : 3A A8 FF            	LDA	PSW		; Get status flags
+     510/     397 : CA 9B 03            	JZ	NOCOM		; No need to complement
+     511/     39A : 2F                  	CMA			; Invert for NOT tests
+     512/     39B : 4F                  NOCOM:	MOV	C,A		; Save PSW bits
+     513/     39C : 78                  	MOV	A,B		; Get conditon back
+     514/     39D : 17                  	RAL			; Is it SIGN flag?
+     515/     39E : DA AF 03            	JC	SIGN		; Yes, handle it
+     516/     3A1 : 17                  	RAL			; Is it ZERO flag?
+     517/     3A2 : DA B5 03            	JC	ZERO		; Yes, handle it
+     518/     3A5 : 17                  	RAL			; Is it PARITY flag?
+     519/     3A6 : DA BB 03            	JC	PARITY		; Yes, handle it
+     520/     3A9 :                     ; This instruction is conditional on the CARRY flag
+     521/     3A9 : 79                  CARRY:	MOV	A,C		; Get flag bits
+     522/     3AA : E6 01               	ANI	01h		; Test CARRY flag
+     523/     3AC : C3 BE 03            	JMP	ENFLG		; And proceed
+     524/     3AF :                     ; This instruction is conditional on the SIGN flag
+     525/     3AF : 79                  SIGN:	MOV	A,C		; Get flag bits
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 10 - 1/25/2012 21:31:36
+
+
+     526/     3B0 : E6 80               	ANI	80h		; Test SIGN flag
+     527/     3B2 : C3 BE 03            	JMP	ENFLG		; And proceed
+     528/     3B5 :                     ; This instruction is conditional on the ZERO flag
+     529/     3B5 : 79                  ZERO:	MOV	A,C		; Get flag bits
+     530/     3B6 : E6 40               	ANI	40h		; Test ZERO flag
+     531/     3B8 : C3 BE 03            	JMP	ENFLG		; And proceed
+     532/     3BB :                     ; This instruction is conditional on the PARITY flag
+     533/     3BB : 79                  PARITY:	MOV	A,C		; Get flag bits
+     534/     3BC : E6 04               	ANI	04h		; Test PARITY flag
+     535/     3BE :                     ; Execute conditional instruction
+     536/     3BE : CA 0A 04            ENFLG:	JZ	NOTRC		; Not executed
+     537/     3C1 : 78                  	MOV	A,B		; Get type back
+     538/     3C2 : E6 04               	ANI	04h		; Is it JUMP
+     539/     3C4 : C2 F2 03            	JNZ	CALRET		; No, try next
+     540/     3C7 :                     ; Simulate a JUMP instruction
+     541/     3C7 : 3A CA FF            GOJMP:	LDA	INST		; Get instruction
+     542/     3CA : FE CD               	CPI	0CDh		; Is it a CALL
+     543/     3CC : CA D6 03            	JZ	PADR		; Yes
+     544/     3CF : E6 C7               	ANI	0C7h		; Mask conditional
+     545/     3D1 : FE C4               	CPI	0C4h		; Conditional call?
+     546/     3D3 : C2 EC 03            	JNZ	NOPSH		; No, its a jump
+     547/     3D6 :                     ; Simulate a subroutine trace
+     548/     3D6 : 3A B0 FF            PADR:	LDA	SFLAG		; Get subroutine tracing flag
+     549/     3D9 : A7                  	ANA	A		; Is it set?
+     550/     3DA : CA 0A 04            	JZ	NOTRC		; No, simulate as one instruction
+     551/     3DD : 2A D0 FF            	LHLD	BUFFER		; Get termination address
+     552/     3E0 : 2B                  	DCX	H		; Backup
+     553/     3E1 : EB                  	XCHG			; D = address
+     554/     3E2 : 2A AA FF            	LHLD	SP		; Get user SP
+     555/     3E5 : 2B                  	DCX	H		; Backup
+     556/     3E6 : 72                  	MOV	M,D		; Set HIGH return address
+     557/     3E7 : 2B                  	DCX	H		; Backup
+     558/     3E8 : 73                  	MOV	M,E		; Set LOW return address
+     559/     3E9 : 22 AA FF            	SHLD	SP		; Resave user SP
+     560/     3EC :                     ; Continue simulation of a JUMP type instruction
+     561/     3EC : 2A CB FF            NOPSH:	LHLD	INST+1		; Get target address
+     562/     3EF : C3 FD 03            	JMP	HLJMP		; And proceed
+     563/     3F2 :                     ; Handle simulation of RETURN instruction
+     564/     3F2 : 2A AA FF            CALRET:	LHLD	SP		; Get sser SP
+     565/     3F5 : 5E                  	MOV	E,M		; Get LOW return address
+     566/     3F6 : 23                  	INX	H		; Advance
+     567/     3F7 : 56                  	MOV	D,M		; Get HIGH return address
+     568/     3F8 : 23                  	INX	H		; Advance
+     569/     3F9 : 22 AA FF            	SHLD	SP		; Resave user SP
+     570/     3FC : EB                  	XCHG			; Set HL = address
+     571/     3FD :                     ; Simulate a jump to the address in HL
+     572/     3FD : 23                  HLJMP:	INX	H		; Advance
+     573/     3FE : 22 D0 FF            	SHLD	BUFFER		; Save new target address
+     574/     401 : 97                  	SUB	A		; Get NOP
+     575/     402 : 67                  	MOV	H,A		; Set HIGH
+     576/     403 : 6F                  	MOV	L,A		; Set LOW
+     577/     404 : 32 CA FF            	STA	INST		; NOP first byte
+     578/     407 : 22 CB FF            	SHLD	INST+1		; NOP second byte
+     579/     40A :                     ; Dispatch the user program
+     580/     40A :                     ; First, insert any breakpoints into the object code
+     581/     40A : 11 B2 FF            NOTRC:	LXI	D,BRKTAB	; Point to breakpoint table
+     582/     40D : 0E 08               	MVI	C,8		; Size of table (in entries)
+     583/     40F : 1A                  RESBP:	LDAX	D		; Get a HIGH address
+     584/     410 : 67                  	MOV	H,A		; Save for later
+     585/     411 : 13                  	INX	D		; Advance
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 11 - 1/25/2012 21:31:36
+
+
+     586/     412 : 1A                  	LDAX	D		; Get low address
+     587/     413 : 6F                  	MOV	L,A		; Save for later
+     588/     414 : 13                  	INX	D		; Advance
+     589/     415 : B4                  	ORA	H		; Is breakpoint enabled?
+     590/     416 : CA 1B 04            	JZ	NORES		; No, its not
+     591/     419 : 36 CF               	MVI	M,0CFh		; Set up a RST 1 breakpoint
+     592/     41B : 13                  NORES:	INX	D		; Skip opcode
+     593/     41C : 0D                  	DCR	C		; Reduce count
+     594/     41D : C2 0F 04            	JNZ	RESBP		; Do them all
+     595/     420 :                     ; Restore the user applications registers
+     596/     420 : 2A AA FF            	LHLD	SP		; Get stack pointer
+     597/     423 : F9                  	SPHL			; Set stack pointer
+     598/     424 : 2A A6 FF            	LHLD	BC		; Get BC
+     599/     427 : E5                  	PUSH	H		; Save
+     600/     428 : C1                  	POP	B		; And set
+     601/     429 : 2A A8 FF            	LHLD	PSW		; Get PSW
+     602/     42C : E5                  	PUSH	H		; Save
+     603/     42D : F1                  	POP	PSW		; And set
+     604/     42E : 2A A4 FF            	LHLD	DE		; Get DE
+     605/     431 : EB                  	XCHG			; Set DE
+     606/     432 : 2A A2 FF            	LHLD	HL		; Get HL
+     607/     435 : C3 CA FF            	JMP	INST		; Execute "faked" instruction
+     608/     438 :                     ; Trace routine: simulate a breakpoint interrupt
+     609/     438 : E5                  FAKE:	PUSH	H		; Save HL on stack
+     610/     439 : 2A D0 FF            	LHLD	BUFFER		; Get address to execute
+     611/     43C : E3                  	XTHL			; Restore HL, [SP] = address
+     612/     43D : C3 5A 00            	JMP	ENTRY		; Display the registers
+     613/     440 :                     ;
+     614/     440 :                     ; Display/Change registers
+     615/     440 :                     ;
+     616/     440 : C2 49 04            REGIST:	JNZ	CHG1		; Register name to change is given
+     617/     443 :                     ; Display registers
+     618/     443 : CD 13 08            	CALL	REGDIS		; Display registers
+     619/     446 : C3 8D 01            	JMP	REST		; And exit
+     620/     449 :                     ; Set register value
+     621/     449 : 47                  CHG1:	MOV	B,A		; Save first register name char
+     622/     44A : CD BB 07            	CALL	GETCHI		; Get char (in upper case)
+     623/     44D : 4F                  	MOV	C,A		; Save for later
+     624/     44E : CA 57 04            	JZ	OKCH		; End of string
+     625/     451 :                     ; Drop extra characters incase 'PSW'
+     626/     451 : CD BC 07            CHG2:	CALL	GETCHR		; Get next
+     627/     454 : C2 51 04            	JNZ	CHG2		; Clean them out
+     628/     457 :                     ; Get new value for register
+     629/     457 : CD D6 07            OKCH:	CALL	CALC		; Get new value
+     630/     45A : 78                  	MOV	A,B		; Get first char
+     631/     45B : FE 48               	CPI	'H'		; Is it HL pair
+     632/     45D : C2 66 04            	JNZ	CDE		; No, try next
+     633/     460 : 22 A2 FF            	SHLD	HL		; Set HL value
+     634/     463 : C3 8D 01            	JMP	REST		; And proceed
+     635/     466 : FE 44               CDE:	CPI	'D'		; Is it DE pair?
+     636/     468 : C2 71 04            	JNZ	CBC		; No, try next
+     637/     46B : 22 A4 FF            	SHLD	DE		; Set DE value
+     638/     46E : C3 8D 01            	JMP	REST		; And proceed
+     639/     471 : FE 42               CBC:	CPI	'B'		; Is it BC pair?
+     640/     473 : C2 7C 04            	JNZ	CSP		; No, try next
+     641/     476 : 22 A6 FF            	SHLD	BC		; Set BC value
+     642/     479 : C3 8D 01            	JMP	REST		; And proceed
+     643/     47C : FE 53               CSP:	CPI	'S'		; Is it SP?
+     644/     47E : C2 87 04            	JNZ	CP		; No, try next
+     645/     481 : 22 AA FF            	SHLD	SP		; Set SP value
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 12 - 1/25/2012 21:31:36
+
+
+     646/     484 : C3 8D 01            	JMP	REST		; And proceed
+     647/     487 : FE 50               CP:	CPI	'P'		; Is it PS or PC
+     648/     489 : C2 AA 01            	JNZ	ERROR		; No, error
+     649/     48C : 79                  	MOV	A,C		; Get low character
+     650/     48D : FE 53               	CPI	'S'		; Is it PSW?
+     651/     48F : C2 98 04            	JNZ	CPC		; No, try next
+     652/     492 : 22 A8 FF            	SHLD	PSW		; Set new PSW
+     653/     495 : C3 8D 01            	JMP	REST		; And proceed
+     654/     498 : FE 43               CPC:	CPI	'C'		; Is it PC?
+     655/     49A : C2 AA 01            	JNZ	ERROR		; No, error
+     656/     49D : 22 AC FF            	SHLD	PC		; Set new PC
+     657/     4A0 : C3 8D 01            	JMP	REST		; And proceed
+     658/     4A3 :                     ; Process an ON/OFF operand
+     659/     4A3 : CD B0 07            ONOFF:	CALL	SKIP		; Get next char
+     660/     4A6 : FE 4F               	CPI	'O'		; Must begin with ON
+     661/     4A8 : C2 AA 01            	JNZ	ERROR		; Invalid
+     662/     4AB : CD BB 07            	CALL	GETCHI		; Get next char
+     663/     4AE : 06 00               	MVI	B,0		; Assume OFF
+     664/     4B0 : FE 46               	CPI	'F'		; OFF?
+     665/     4B2 : CA BB 04            	JZ	RETON		; Yes, set it
+     666/     4B5 : FE 4E               	CPI	'N'		; ON?
+     667/     4B7 : C2 AA 01            	JNZ	ERROR		; No, error
+     668/     4BA : 05                  	DCR	B		; Convert to FF
+     669/     4BB : 78                  RETON:	MOV	A,B		; Save new value
+     670/     4BC : C9                  	RET
+     671/     4BD :                     ;
+     672/     4BD :                     ; Turn automatic register display ON or OFF
+     673/     4BD :                     ;
+     674/     4BD : CD A3 04            AUTO:	CALL	ONOFF		; Get ON/OFF value
+     675/     4C0 : 32 B1 FF            	STA	AFLAG		; Set AUTOREG flag
+     676/     4C3 : C3 8D 01            	JMP	REST		; And proceed
+     677/     4C6 :                     ;
+     678/     4C6 :                     ; Turn SUBROUTINE tracing ON or OFF
+     679/     4C6 :                     ;
+     680/     4C6 : CD A3 04            SUBON:	CALL	ONOFF		; Get ON/OFF value
+     681/     4C9 : 32 B0 FF            	STA	SFLAG		; Set SUBTRACE flag
+     682/     4CC : C3 8D 01            	JMP	REST		; And proceed
+     683/     4CF :                     ;
+     684/     4CF :                     ; Set TRACE mode ON or OFF
+     685/     4CF :                     ;
+     686/     4CF : CD A3 04            TRACE:	CALL	ONOFF		; Get ON/OFF value
+     687/     4D2 : 32 AF FF            	STA	TFLAG		; Set TRACE flag
+     688/     4D5 : C3 8D 01            	JMP	REST		; And proceed
+     689/     4D8 :                     ;
+     690/     4D8 :                     ; Edit memory contents
+     691/     4D8 :                     ;
+     692/     4D8 : CD D6 07            EDIT:	CALL	CALC		; Get address
+     693/     4DB : CD 40 0F            EDIT1:	CALL	HLOUT		; Display address
+     694/     4DE : CD 9B 08            	CALL	SPACE		; Separator
+     695/     4E1 : 7E                  	MOV	A,M		; Get contents
+     696/     4E2 : CD 45 0F            	CALL	HPR		; Output
+     697/     4E5 : 3E 3D               	MVI	A,'='		; Prompt
+     698/     4E7 : CD AA 0F            	CALL	OUT		; Output
+     699/     4EA : E5                  	PUSH	H		; Save address
+     700/     4EB : CD 67 07            	CALL	INPT		; Get a value
+     701/     4EE : E1                  	POP	H		; Restore address
+     702/     4EF : 23                  	INX	H		; Assume advance
+     703/     4F0 : CA DB 04            	JZ	EDIT1		; Null, advance
+     704/     4F3 : 2B                  	DCX	H		; Fix mistake
+     705/     4F4 : 2B                  	DCX	H		; Assume backup
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 13 - 1/25/2012 21:31:36
+
+
+     706/     4F5 : FE 2D               	CPI	'-'		; Backup?
+     707/     4F7 : CA DB 04            	JZ	EDIT1		; Yes, backup a byte
+     708/     4FA : 23                  	INX	H		; Fix mistake
+     709/     4FB : FE 27               	CPI	27h		; Single quote?
+     710/     4FD : C2 0C 05            	JNZ	EDIT3		; No, try hex value
+     711/     500 :                     ; Handle quoted ASCII text
+     712/     500 : 13                  	INX	D		; Skip the quote
+     713/     501 : 1A                  EDIT2:	LDAX	D		; Get char
+     714/     502 : 13                  	INX	D		; Advance input
+     715/     503 : A7                  	ANA	A		; End of loop?
+     716/     504 : CA DB 04            	JZ	EDIT1		; Yes, exit
+     717/     507 : 77                  	MOV	M,A		; Save it
+     718/     508 : 23                  	INX	H		; Advance output
+     719/     509 : C3 01 05            	JMP	EDIT2		; And proceed
+     720/     50C :                     ; Handle HEXIDECIMAL values
+     721/     50C : E5                  EDIT3:	PUSH	H		; Save address
+     722/     50D : CD CC 07            	CALL	CALC8		; Get HEX value
+     723/     510 : E1                  	POP	H		; HL = address
+     724/     511 : 77                  	MOV	M,A		; Set value
+     725/     512 : 23                  	INX	H		; Advance to next
+     726/     513 : CD B0 07            	CALL	SKIP		; More operands?
+     727/     516 : C2 0C 05            	JNZ	EDIT3		; Get then all
+     728/     519 : C3 DB 04            	JMP	EDIT1		; And continue
+     729/     51C :                     ;
+     730/     51C :                     ; FIll memory with a value
+     731/     51C :                     ;
+     732/     51C : CD D6 07            FILL:	CALL	CALC		; Get starting address
+     733/     51F : E5                  	PUSH	H		; Save for later
+     734/     520 : CD D6 07            	CALL	CALC		; Get ending address
+     735/     523 : E5                  	PUSH	H		; Save for later
+     736/     524 : CD CC 07            	CALL	CALC8		; Get value
+     737/     527 : 4F                  	MOV	C,A		; C = value
+     738/     528 : D1                  	POP	D
+     739/     529 : 13                  	INX	D		; DE = End address+1
+     740/     52A : E1                  	POP	H		; HL = Starting address
+     741/     52B : CD 3C 05            	CALL	COMP16		; Is Start<End ?
+     742/     52E : D2 AA 01            	JNC	ERROR		; Yes, bad entry
+     743/     531 : 71                  FILL1:	MOV	M,C		; Save one byte
+     744/     532 : 23                  	INX	H		; Advance
+     745/     533 : CD 3C 05            	CALL	COMP16		; Test for match
+     746/     536 : DA 31 05            	JC	FILL1		; And proceed
+     747/     539 : C3 8D 01            	JMP	REST		; Back for next
+     748/     53C :                     ;
+     749/     53C :                     ; 16 bit compare of HL to DE
+     750/     53C :                     ;
+     751/     53C : 7C                  COMP16:	MOV	A,H		; Get HIGH
+     752/     53D : BA                  	CMP	D		; Match?
+     753/     53E : C0                  	RNZ			; No, we are done
+     754/     53F : 7D                  	MOV	A,L		; Get LOW
+     755/     540 : BB                  	CMP	E		; Match?
+     756/     541 : C9                  	RET
+     757/     542 :                     ;
+     758/     542 :                     ; Copy a block of memory
+     759/     542 :                     ;
+     760/     542 : CD D6 07            COPY:	CALL	CALC		; Get SOURCE address
+     761/     545 : E5                  	PUSH	H		; Save for later
+     762/     546 : CD D6 07            	CALL	CALC		; Get DEST Address
+     763/     549 : E5                  	PUSH	H		; Save for later
+     764/     54A : CD D6 07            	CALL	CALC		; Get size
+     765/     54D : 44                  	MOV	B,H		; BC = Size
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 14 - 1/25/2012 21:31:36
+
+
+     766/     54E : 4D                  	MOV	C,L
+     767/     54F : D1                  	POP	D		; DE = Dest address
+     768/     550 : E1                  	POP	H		; HL = Source
+     769/     551 : 78                  	MOV	A,B		; Size is zero?
+     770/     552 : B1                  	ORA	C
+     771/     553 : CA 8D 01            	JZ	REST		; Yes, exit
+     772/     556 : CD 3C 05            	CALL	COMP16		; Compare source and destination address
+     773/     559 : DA 69 05            	JC	COPY2		; Dest > Source, jump
+     774/     55C :                     	; Source > Dest
+     775/     55C : 7E                  COPY1:	MOV	A,M		; Get byte from source
+     776/     55D : 12                  	STAX	D		; Write to dest
+     777/     55E : 23                  	INX	H		; Advance source
+     778/     55F : 13                  	INX	D		; Advance dest
+     779/     560 : 0B                  	DCX	B		; Reduce count
+     780/     561 : 79                  	MOV	A,C		; Count is zero ?
+     781/     562 : B0                  	ORA	B
+     782/     563 : C2 5C 05            	JNZ	COPY1		; No, continue
+     783/     566 : C3 8D 01            	JMP	REST
+     784/     569 :                     	; Dest > Source
+     785/     569 : 09                  COPY2:	DAD	B		; Move source and destination address to end
+     786/     56A : 2B                  	DCX	H		; of block
+     787/     56B : EB                  	XCHG
+     788/     56C : 09                  	DAD	B
+     789/     56D : 2B                  	DCX	H
+     790/     56E : 1A                  COPY3:	LDAX	D		; Get byte from source
+     791/     56F : 77                  	MOV	M,A		; Write to dest
+     792/     570 : 1B                  	DCX	D		; Decrement source address
+     793/     571 : 2B                  	DCX	H		; Decrement destination address
+     794/     572 : 0B                  	DCX	B		; Reduce count
+     795/     573 : 79                  	MOV	A,C		; Count is zero ?
+     796/     574 : B0                  	ORA	B
+     797/     575 : C2 6E 05            	JNZ	COPY3		; No, continue
+     798/     578 : C3 8D 01            	JMP	REST
+     799/     57B :                     ;
+     800/     57B :                     ; Display a block of memory
+     801/     57B :                     ;
+     802/     57B : CD D6 07            MEMRY:	CALL	CALC		; Get operand
+     803/     57E : 97                  	SUB	A		; Get a ZERO
+     804/     57F : 32 AE FF            	STA	OFLAG		; Clear output flag
+     805/     582 : CD 95 08            ALOOP:	CALL	HLOUT2		; Display address (in hex) with 2 spaces
+     806/     585 : 16 10               	MVI	D,16		; 16 bytes/line
+     807/     587 : E5                  	PUSH	H		; Save address
+     808/     588 : 7E                  ALP1:	MOV	A,M		; Get byte
+     809/     589 : CD 45 0F            	CALL	HPR		; Output in hex
+     810/     58C : CD 9B 08            	CALL	SPACE		; Space over
+     811/     58F : 7A                  	MOV	A,D		; Get count
+     812/     590 : FE 09               	CPI	9		; At boundary?
+     813/     592 : CC 9B 08            	CZ	SPACE		; Yes, extra space
+     814/     595 : 7A                  	MOV	A,D		; Get count
+     815/     596 : E6 07               	ANI	7		; Mask for low bits
+     816/     598 : FE 05               	CPI	5		; At boundary?
+     817/     59A : CC 9B 08            	CZ	SPACE		; Extra space
+     818/     59D : 23                  	INX	H		; Advance address
+     819/     59E : 15                  	DCR	D		; Reduce count
+     820/     59F : C2 88 05            	JNZ	ALP1		; Do them all
+     821/     5A2 : 16 04               	MVI	D,4		; # separating spaces
+     822/     5A4 : CD 9B 08            AL2:	CALL	SPACE		; Output a space
+     823/     5A7 : 15                  	DCR	D		; Reduce count
+     824/     5A8 : C2 A4 05            	JNZ	AL2		; And proceed
+     825/     5AB : E1                  	POP	H
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 15 - 1/25/2012 21:31:36
+
+
+     826/     5AC : 16 10               	MVI	D,16		; 16 chars/display
+     827/     5AE : 7E                  AL3:	MOV	A,M		; Get data byte
+     828/     5AF : CD 94 0F            	CALL	OUTP		; Display (if printable)
+     829/     5B2 : 23                  	INX	H		; Advance to next
+     830/     5B3 : 15                  	DCR	D		; Reduce count
+     831/     5B4 : C2 AE 05            	JNZ	AL3		; Do them all
+     832/     5B7 : CD 67 0F            	CALL	CHKSUS		; Handle output suspension
+     833/     5BA : C3 82 05            	JMP	ALOOP		; And continue
+     834/     5BD :                     ;
+     835/     5BD :                     ; Perform disassembly to console
+     836/     5BD :                     ;
+     837/     5BD : CD D6 07            GODIS:	CALL	CALC		; Get starting address
+     838/     5C0 : E5                  	PUSH	H		; Save address
+     839/     5C1 : D1                  	POP	D		; Copy to D
+     840/     5C2 : 97                  	SUB	A		; Get a zero
+     841/     5C3 : 32 AE FF            	STA	OFLAG		; Clear output flag
+     842/     5C6 : CD AA 08            VLOOP:	CALL	DINST		; Display one instruction
+     843/     5C9 : CD 67 0F            	CALL	CHKSUS		; Handle output
+     844/     5CC : C3 C6 05            	JMP	VLOOP		; And proceed
+     845/     5CF :                     ;
+     846/     5CF :                     ; Set/display user base address
+     847/     5CF :                     ;
+     848/     5CF : C2 E4 05            USRBASE: JNZ	USRB1		; Address is given, set it
+     849/     5D2 : CD 58 0F            	CALL	PRTMSG		; Output message
+     850/     5D5 : 42 41 53 45 3D 00   	DB	"BASE=",0
+     851/     5DB : 2A A0 FF            	LHLD	UBASE		; Get address
+     852/     5DE : CD 40 0F            	CALL	HLOUT		; Output
+     853/     5E1 : C3 8A 01            	JMP	RECR		; New line & exit
+     854/     5E4 : CD D6 07            USRB1:	CALL	CALC		; Get operand
+     855/     5E7 : 22 A0 FF            	SHLD	UBASE		; Set the address
+     856/     5EA : C3 8D 01            	JMP	REST		; and return
+     857/     5ED :                     ;
+     858/     5ED :                     ; Send out as Intel HEX
+     859/     5ED :                     ;
+     860/     5ED : CD D6 07            SNDHEX:	CALL	CALC		; Get start address
+     861/     5F0 : E5                  	PUSH	H		; Save for later
+     862/     5F1 : CD D6 07            	CALL	CALC		; Get end address
+     863/     5F4 : 23                  	INX	H		; HL = end+1
+     864/     5F5 : D1                  	POP	D		; DE = start
+     865/     5F6 : CD 3C 05            	CALL	COMP16		; Check for Start > End
+     866/     5F9 : DA AA 01            	JC	ERROR		; Bad entry
+     867/     5FC : 7D                  	MOV	A,L		; Compute length
+     868/     5FD : 93                  	SUB	E
+     869/     5FE : 6F                  	MOV	L,A
+     870/     5FF : 7C                  	MOV	A,H
+     871/     600 : 9A                  	SBB	D
+     872/     601 : 67                  	MOV	H,A
+     873/     602 : EB                  	XCHG			; HL = start, DE = length
+     874/     603 : 7A                  SNDHX1:	MOV	A,D		; Finish ?
+     875/     604 : B3                  	ORA	E
+     876/     605 : CA 1B 06            	JZ	SNDHX3		; Yes, jump
+     877/     608 : 06 10               	MVI	B,16		; 16 bytes per record
+     878/     60A : 7A                  	MOV	A,D		; Is rest > 16 ?
+     879/     60B : B7                  	ORA	A
+     880/     60C : C2 15 06            	JNZ	SNDHX2		; No, jump
+     881/     60F : 7B                  	MOV	A,E
+     882/     610 : B8                  	CMP	B
+     883/     611 : D2 15 06            	JNC	SNDHX2		; No, jump
+     884/     614 : 43                  	MOV	B,E		; Yes, B=rest
+     885/     615 : CD 2F 06            SNDHX2:	CALL	SHXRC		; Send out one record
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 16 - 1/25/2012 21:31:36
+
+
+     886/     618 : C3 03 06            	JMP	SNDHX1		; continue
+     887/     61B :                     ;
+     888/     61B : CD 58 0F            SNDHX3:	CALL	PRTMSG
+     889/     61E : 3A 30 30 30 30 30   	DB	":00000001FF",0Dh,0Ah,0
+                    30 30 31 46 46 0D 
+                    0A 00 
+     890/     62C : C3 8D 01            	JMP	REST
+     891/     62F :                     ;
+     892/     62F : 3E 3A               SHXRC:	MVI	A,':'		; Start record
+     893/     631 : CD AA 0F            	CALL	OUT
+     894/     634 : 78                  	MOV	A,B		; Length
+     895/     635 : 4F                  	MOV	C,A		; Init checksum
+     896/     636 : CD 45 0F            	CALL	HPR		; Output in hex
+     897/     639 : 7C                  	MOV	A,H		; High byte of address 
+     898/     63A : 81                  	ADD	C		; Include in checksum
+     899/     63B : 4F                  	MOV	C,A		; Re-save
+     900/     63C : 7C                  	MOV	A,H
+     901/     63D : CD 45 0F            	CALL	HPR		; Output in hex
+     902/     640 : 7D                  	MOV	A,L		; Low byte of address 
+     903/     641 : 81                  	ADD	C		; Include in checksum
+     904/     642 : 4F                  	MOV	C,A		; Re-save
+     905/     643 : 7D                  	MOV	A,L
+     906/     644 : CD 45 0F            	CALL	HPR		; Output in hex
+     907/     647 : AF                  	XRA	A		; Record type
+     908/     648 : CD 45 0F            	CALL	HPR
+     909/     64B : 7E                  SHXRC1:	MOV	A,M		; One byte
+     910/     64C : 81                  	ADD	C		; Include in checksum
+     911/     64D : 4F                  	MOV	C,A		; Re-save
+     912/     64E : 7E                  	MOV	A,M
+     913/     64F : 23                  	INX	H
+     914/     650 : CD 45 0F            	CALL	HPR		; Output in hex
+     915/     653 : 1B                  	DCX	D		; Decrement main counter
+     916/     654 : 05                  	DCR	B		; Decrement bytes per record counter
+     917/     655 : C2 4B 06            	JNZ	SHXRC1
+     918/     658 : 79                  	MOV	A,C		; Negate checksum
+     919/     659 : 2F                  	CMA
+     920/     65A : 3C                  	INR	A
+     921/     65B : CD 45 0F            	CALL	HPR		; Output in hex
+     922/     65E : C3 A3 0F            	JMP	CRLF
+     923/     661 :                     ;
+     924/     661 :                     ; Download command
+     925/     661 :                     ;
+     926/     661 : 3E 0F               LOAD:	MVI	A,0Fh		; Get default initial state
+     927/     663 : CA 6E 06            	JZ	LOAD1		; Address not given...
+     928/     666 : CD D6 07            	CALL	CALC		; Get operand value
+     929/     669 : 22 D3 FF            	SHLD	BUFFER+3	; Save for later calulation
+     930/     66C : 3E FF               	MVI	A,0FFh		; Set new initial state
+     931/     66E :                     ; Setup the offset calculator
+     932/     66E : 21 00 00            LOAD1:	LXI	H,0		; Assume no offset
+     933/     671 : 32 D0 FF            	STA	BUFFER		; Set mode flag
+     934/     674 : 22 D1 FF            	SHLD	BUFFER+1	; Assume offset is ZERO
+     935/     677 :                     ; Download the records
+     936/     677 : CD A4 06            LOAD2:	CALL	DLREC		; Get a record
+     937/     67A : C2 83 06            	JNZ	DLBAD		; Report error
+     938/     67D : D2 77 06            	JNC	LOAD2		; Get them all
+     939/     680 : C3 94 06            	JMP	DLWAIT		; And back to monitor
+     940/     683 :                     ; Error in receiving download record
+     941/     683 : CD 58 0F            DLBAD:	CALL	PRTMSG		; Output message
+     942/     686 : 3F 4C 6F 61 64 20   	DB	"?Load error"
+                    65 72 72 6F 72 
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 17 - 1/25/2012 21:31:36
+
+
+     943/     691 : 0D 0A 00            	DB	0Dh,0Ah,0
+     944/     694 :                     ; Wait till incoming data stream stops
+     945/     694 : 0E 00               DLWAIT:	MVI	C,0		; Initial count
+     946/     696 : CD B5 0F            DLWAIT1: CALL	IN		; Test for input
+     947/     699 : A7                  	ANA	A		; Any data
+     948/     69A : C2 94 06            	JNZ	DLWAIT		; Reset count
+     949/     69D : 0D                  	DCR	C		; Reduce counter
+     950/     69E : C2 96 06            	JNZ	DLWAIT1		; Keep looking
+     951/     6A1 : C3 8D 01            	JMP	REST		; Back to monitor
+     952/     6A4 :                     ;
+     953/     6A4 :                     ; Download a record from the serial port
+     954/     6A4 :                     ;
+     955/     6A4 : CD 38 0F            DLREC:	CALL	INCHR		; Read a character
+     956/     6A7 : FE 3A               	CPI	':'		; Start of record?
+     957/     6A9 : CA EB 06            	JZ	DLINT		; Download INTEL format
+     958/     6AC : FE 53               	CPI	'S'		; Is it MOTOROLA?
+     959/     6AE : C2 A4 06            	JNZ	DLREC		; No, keep looking
+     960/     6B1 :                     ; Download a MOTOROLA HEX format record
+     961/     6B1 : CD 38 0F            DLMOT:	CALL	INCHR		; Get next character
+     962/     6B4 : FE 30               	CPI	'0'		; Header record?
+     963/     6B6 : CA A4 06            	JZ	DLREC		; Yes, skip it
+     964/     6B9 : FE 39               	CPI	'9'		; End of file?
+     965/     6BB : CA 19 07            	JZ	DLEOF		; Yes, report EOF
+     966/     6BE : FE 31               	CPI	'1'		; Type 1 (code) record
+     967/     6C0 : C2 64 07            	JNZ	DLERR		; Report error
+     968/     6C3 : CD 40 07            	CALL	GETBYT		; Get length
+     969/     6C6 : 4F                  	MOV	C,A		; Start checksum
+     970/     6C7 : D6 03               	SUI	3		; Convert for overhead
+     971/     6C9 : 47                  	MOV	B,A		; Save data length
+     972/     6CA : CD 40 07            	CALL	GETBYT		; Get first byte of address
+     973/     6CD : 67                  	MOV	H,A		; Set HIGH address
+     974/     6CE : 81                  	ADD	C		; Include in checksum
+     975/     6CF : 4F                  	MOV	C,A		; And re-save
+     976/     6D0 : CD 40 07            	CALL	GETBYT		; Get next byte of address
+     977/     6D3 : 6F                  	MOV	L,A		; Set LOW address
+     978/     6D4 : 81                  	ADD	C		; Include in checksum
+     979/     6D5 : 4F                  	MOV	C,A		; And re-save
+     980/     6D6 : CD 1B 07            	CALL	SETOFF		; Handle record offsets
+     981/     6D9 : CD 40 07            DMOT1:	CALL	GETBYT		; Get a byte of data
+     982/     6DC : 77                  	MOV	M,A		; Save in memory
+     983/     6DD : 23                  	INX	H		; Advance
+     984/     6DE : 81                  	ADD	C		; Include in checksum
+     985/     6DF : 4F                  	MOV	C,A		; And re-save
+     986/     6E0 : 05                  	DCR	B		; Reduce length
+     987/     6E1 : C2 D9 06            	JNZ	DMOT1		; Keep going
+     988/     6E4 : CD 40 07            	CALL	GETBYT		; Get record checksum
+     989/     6E7 : 81                  	ADD	C		; Include calculated checksum
+     990/     6E8 : 3C                  	INR	A		; Adjust for test
+     991/     6E9 : A7                  	ANA	A		; Clear carry set Z
+     992/     6EA : C9                  	RET
+     993/     6EB :                     ; Download a record in INTEL hex format
+     994/     6EB : CD 40 07            DLINT:	CALL	GETBYT		; Get length
+     995/     6EE : A7                  	ANA	A		; End of file?
+     996/     6EF : CA 19 07            	JZ	DLEOF		; Yes, handle it
+     997/     6F2 : 4F                  	MOV	C,A		; Begin Checksum
+     998/     6F3 : 47                  	MOV	B,A		; Record length
+     999/     6F4 : CD 40 07            	CALL	GETBYT		; Get HIGH address
+    1000/     6F7 : 67                  	MOV	H,A		; Set HIGH address
+    1001/     6F8 : 81                  	ADD	C		; Include in checksum
+    1002/     6F9 : 4F                  	MOV	C,A		; Re-save
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 18 - 1/25/2012 21:31:36
+
+
+    1003/     6FA : CD 40 07            	CALL	GETBYT		; Get LOW address
+    1004/     6FD : 6F                  	MOV	L,A		; Set LOW address
+    1005/     6FE : 81                  	ADD	C		; Include in checksum
+    1006/     6FF : 4F                  	MOV	C,A		; Re-save
+    1007/     700 : CD 1B 07            	CALL	SETOFF		; Handle record offsets
+    1008/     703 : CD 40 07            	CALL	GETBYT		; Get type byte
+    1009/     706 : 81                  	ADD	C		; Include in checksum
+    1010/     707 : 4F                  	MOV	C,A		; Re-save
+    1011/     708 : CD 40 07            DLINT1:	CALL	GETBYT		; Get data byte
+    1012/     70B : 77                  	MOV	M,A		; Save in memory
+    1013/     70C : 23                  	INX	H		; Advance to next
+    1014/     70D : 81                  	ADD	C		; Include in checksum
+    1015/     70E : 4F                  	MOV	C,A		; Resave checksum
+    1016/     70F : 05                  	DCR	B		; Reduce count
+    1017/     710 : C2 08 07            	JNZ	DLINT1		; Do entire record
+    1018/     713 : CD 40 07            	CALL	GETBYT		; Get record checksum
+    1019/     716 : 81                  	ADD	C		; Add to computed checksum
+    1020/     717 : A7                  	ANA	A		; Clear carry, set Z
+    1021/     718 : C9                  	RET
+    1022/     719 :                     ; End of file on download
+    1023/     719 : 37                  DLEOF:	STC			; Set carry, EOF
+    1024/     71A : C9                  	RET
+    1025/     71B :                     ;
+    1026/     71B :                     ; Process record offsets for download records
+    1027/     71B :                     ;
+    1028/     71B : 3A D0 FF            SETOFF:	LDA	BUFFER		; Get flag
+    1029/     71E : A7                  	ANA	A		; Test flag
+    1030/     71F : C2 28 07            	JNZ	SETOF1		; Special case
+    1031/     722 :                     ; Not first record, adjust for offset & proceed
+    1032/     722 : EB                  	XCHG			; DE = address
+    1033/     723 : 2A D1 FF            	LHLD	BUFFER+1	; Get offset
+    1034/     726 : 19                  	DAD	D		; HL = address + offset
+    1035/     727 : C9                  	RET
+    1036/     728 :                     ; First record, set USER BASE & calculate offset (if any)
+    1037/     728 : 3E 00               SETOF1:	MVI	A,0		; Get zero (NO CC)
+    1038/     72A : 32 D0 FF            	STA	BUFFER		; Clear flag
+    1039/     72D : 22 A0 FF            	SHLD	UBASE		; Set user program base
+    1040/     730 : F0                  	RP			; No more action
+    1041/     731 :                     ; Calculate record offset to RAM area
+    1042/     731 : EB                  	XCHG			; DE = address
+    1043/     732 : 2A D3 FF            	LHLD	BUFFER+3	; Get operand
+    1044/     735 : 7D                  	MOV	A,L		; Subtract
+    1045/     736 : 93                  	SUB	E		; Record
+    1046/     737 : 6F                  	MOV	L,A		; From
+    1047/     738 : 7C                  	MOV	A,H		; Operand
+    1048/     739 : 9A                  	SBB	D		; To get
+    1049/     73A : 67                  	MOV	H,A		; Offset
+    1050/     73B : 22 D1 FF            	SHLD	BUFFER+1	; Set new offset
+    1051/     73E : 19                  	DAD	D		; Get address
+    1052/     73F : C9                  	RET
+    1053/     740 :                     ;
+    1054/     740 :                     ; Gets a byte of HEX data from serial port.
+    1055/     740 :                     ;
+    1056/     740 : CD 4D 07            GETBYT:	CALL	GETNIB		; Get first nibble
+    1057/     743 : 07                  	RLC			; Shift into
+    1058/     744 : 07                  	RLC			; Upper nibble
+    1059/     745 : 07                  	RLC			; Of result
+    1060/     746 : 07                  	RLC			; To make room for lower
+    1061/     747 : 5F                  	MOV	E,A		; Keep high digit
+    1062/     748 : CD 4D 07            	CALL	GETNIB		; Get second digit
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 19 - 1/25/2012 21:31:36
+
+
+    1063/     74B : B3                  	ORA	E		; Insert high digit
+    1064/     74C : C9                  	RET
+    1065/     74D :                     ; GETS A NIBBLE FROM THE TERMINAL (IN ASCII HEX)
+    1066/     74D : CD 38 0F            GETNIB:	CALL	INCHR		; Get a character
+    1067/     750 : D6 30               	SUI	'0'		; Is it < '0'?
+    1068/     752 : DA 62 07            	JC	GETN1		; Yes, invalid
+    1069/     755 : FE 0A               	CPI	10		; 0-9?
+    1070/     757 : D8                  	RC			; Yes, its OK
+    1071/     758 : D6 07               	SUI	7		; Convert
+    1072/     75A : FE 0A               	CPI	10		; 9-A?
+    1073/     75C : DA 62 07            	JC	GETN1		; Yes, invalid
+    1074/     75F : FE 10               	CPI	16		; A-F?
+    1075/     761 : D8                  	RC			; Yes, its OK
+    1076/     762 : D1                  GETN1:	POP	D		; Remove GETNIB RET addr
+    1077/     763 : D1                  	POP	D		; Remove GETBYT RET addr
+    1078/     764 :                     ; Error during download record
+    1079/     764 : F6 FF               DLERR:	ORI	0FFh		; Error indicator
+    1080/     766 : C9                  	RET
+    1081/     767 :                     ;
+    1082/     767 :                     ; Read an input line from the console
+    1083/     767 :                     ;
+    1084/     767 : 21 D0 FF            INPT:	LXI	H,BUFFER	; Point to input buffer
+    1085/     76A : CD 38 0F            INPT1:	CALL	INCHR		; Get a char
+    1086/     76D : FE 1B               	CPI	1Bh		; ESCAPE?
+    1087/     76F : CA 8A 01            	JZ	RECR		; Back for command
+    1088/     772 : FE 0D               	CPI	0Dh		; Carriage return?
+    1089/     774 : CA A8 07            	JZ	INPT4		; Yes, exit
+    1090/     777 : 57                  	MOV	D,A		; Save for later
+    1091/     778 :                     ; Test for DELETE function
+    1092/     778 : FE 7F               	CPI	7Fh		; Is it delete?
+    1093/     77A : CA 93 07            	JZ	INPT3		; Yes, it is
+    1094/     77D : FE 08               	CPI	08h		; Backspace?
+    1095/     77F : CA 93 07            	JZ	INPT3		; Yes, it is
+    1096/     782 :                     ; Insert character in buffer
+    1097/     782 : 7D                  	MOV	A,L		; Get low address
+    1098/     783 : FE EE               	CPI	(BUFFER&255)+30	; Beyond end?
+    1099/     785 : 3E 07               	MVI	A,7		; Assume error
+    1100/     787 : CA 8D 07            	JZ	INPT2		; Yes, report error
+    1101/     78A : 7A                  	MOV	A,D		; Get char back
+    1102/     78B : 77                  	MOV	M,A		; Save in memory
+    1103/     78C : 23                  	INX	H		; Advance
+    1104/     78D : CD AA 0F            INPT2:	CALL	OUT		; Echo it
+    1105/     790 : C3 6A 07            	JMP	INPT1		; And proceed
+    1106/     793 :                     ; Delete last character from buffer
+    1107/     793 : 7D                  INPT3:	MOV	A,L		; Get char
+    1108/     794 : FE D0               	CPI	BUFFER&255	; At begining
+    1109/     796 : 3E 07               	MVI	A,7		; Assume error
+    1110/     798 : CA 8D 07            	JZ	INPT2		; Report error
+    1111/     79B : E5                  	PUSH	H		; Save H
+    1112/     79C : CD 58 0F            	CALL	PRTMSG		; Output message
+    1113/     79F : 08 20 08 00         	DB	8,' ',8,0	; Wipe away character
+    1114/     7A3 : E1                  	POP	H		; Restore H
+    1115/     7A4 : 2B                  	DCX	H		; Backup
+    1116/     7A5 : C3 6A 07            	JMP	INPT1		; And proceed
+    1117/     7A8 :                     ; Terminate the command
+    1118/     7A8 : 36 00               INPT4:	MVI	M,0		; Zero terminate
+    1119/     7AA : CD A3 0F            	CALL	CRLF		; New line
+    1120/     7AD : 11 D0 FF            	LXI	D,BUFFER	; Point to input buffer
+    1121/     7B0 :                     ; Advance to next non-blank in buffer
+    1122/     7B0 : 1A                  SKIP:	LDAX	D		; Get char from buffer
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 20 - 1/25/2012 21:31:36
+
+
+    1123/     7B1 : 13                  	INX	D		; Advance
+    1124/     7B2 : FE 20               	CPI	' '		; Space?
+    1125/     7B4 : CA B0 07            	JZ	SKIP		; Yes, keep looking
+    1126/     7B7 : 1B                  	DCX	D		; Backup to it
+    1127/     7B8 : C3 C0 07            	JMP	TOCAP		; And convert to upper
+    1128/     7BB :                     ;
+    1129/     7BB :                     ; Read next character from command & convert to upper case
+    1130/     7BB :                     ;
+    1131/     7BB : 13                  GETCHI:	INX	D		; Skip next character
+    1132/     7BC : 1A                  GETCHR:	LDAX	D		; Get char from command line
+    1133/     7BD : A7                  	ANA	A		; End of line?
+    1134/     7BE : C8                  	RZ			; Yes, return with it
+    1135/     7BF : 13                  	INX	D		; Advance command pointer
+    1136/     7C0 :                     ;
+    1137/     7C0 :                     ; Convert character in A to uppercase, set Z if SPACE or EOL
+    1138/     7C0 :                     ;
+    1139/     7C0 : FE 61               TOCAP:	CPI	61h		; Lower case?
+    1140/     7C2 : DA C7 07            	JC	TOCAP1		; Yes, its ok
+    1141/     7C5 : E6 5F               	ANI	5Fh		; Convert to UPPER
+    1142/     7C7 : FE 20               TOCAP1:	CPI	' '		; Space
+    1143/     7C9 : C8                  	RZ			; Yes, indicate
+    1144/     7CA : A7                  	ANA	A		; Set 'Z' if EOL
+    1145/     7CB : C9                  	RET
+    1146/     7CC :                     ;
+    1147/     7CC :                     ; Get 8 bit HEX operands to command
+    1148/     7CC :                     ;
+    1149/     7CC : CD D6 07            CALC8:	CALL	CALC		; Get operand
+    1150/     7CF : 7C                  	MOV	A,H		; High byte must be zero
+    1151/     7D0 : B7                  	ORA	A
+    1152/     7D1 : C2 AA 01            	JNZ	ERROR		; Bad value
+    1153/     7D4 : 7D                  	MOV	A,L		; Value also to A
+    1154/     7D5 : C9                  	RET
+    1155/     7D6 :                     ;
+    1156/     7D6 :                     ; Get 16 bit HEX operands to command
+    1157/     7D6 :                     ;
+    1158/     7D6 : C5                  CALC:	PUSH	B		; Save B-C
+    1159/     7D7 : CD B0 07            	CALL	SKIP		; Find start of operand
+    1160/     7DA : 21 00 00            	LXI	H,0		; Begin with zero value
+    1161/     7DD : 4C                  	MOV	C,H		; Clear flag
+    1162/     7DE : CD BC 07            CALC1:	CALL	GETCHR		; Get next char
+    1163/     7E1 : CA FE 07            	JZ	CALC3		; End of number
+    1164/     7E4 : CD 05 08            	CALL	VALHEX		; Is it valid hex?
+    1165/     7E7 : DA AA 01            	JC	ERROR		; No, report error
+    1166/     7EA : 29                  	DAD	H		; HL = HL*2
+    1167/     7EB : 29                  	DAD	H		; HL = HL*4
+    1168/     7EC : 29                  	DAD	H		; HL = HL*8
+    1169/     7ED : 29                  	DAD	H		; HL = HL*16 (Shift over 4 bits)
+    1170/     7EE : D6 30               	SUI	'0'		; Convert to ASCII
+    1171/     7F0 : FE 0A               	CPI	10		; Decimal number?
+    1172/     7F2 : DA F7 07            	JC	CALC2		; Yes, its ok
+    1173/     7F5 : D6 07               	SUI	7		; Convert to HEX
+    1174/     7F7 : B5                  CALC2:	ORA	L		; Include in final value
+    1175/     7F8 : 6F                  	MOV	L,A		; Resave low bute
+    1176/     7F9 : 0E FF               	MVI	C,0FFh		; Set flag & indicate we have char
+    1177/     7FB : C3 DE 07            	JMP	CALC1		; And continue
+    1178/     7FE :                     ; End of input string was found
+    1179/     7FE : 79                  CALC3:	MOV	A,C		; Get flag
+    1180/     7FF : C1                  	POP	B		; Restore B-C
+    1181/     800 : A7                  	ANA	A		; Was there any digits?
+    1182/     801 : CA AA 01            	JZ	ERROR		; No, invalid
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 21 - 1/25/2012 21:31:36
+
+
+    1183/     804 : C9                  	RET
+    1184/     805 :                     ; Test for character in A as valid hex
+    1185/     805 : FE 30               VALHEX:	CPI	'0'		; < '0'
+    1186/     807 : D8                  	RC			; Too low
+    1187/     808 : FE 47               	CPI	'G'		; >'F'
+    1188/     80A : 3F                  	CMC			; Set C state
+    1189/     80B : D8                  	RC			; Too high
+    1190/     80C : FE 3A               	CPI	3Ah		; <='9'
+    1191/     80E : 3F                  	CMC			; Set C state
+    1192/     80F : D0                  	RNC			; Yes, its OK
+    1193/     810 : FE 41               	CPI	'A'		; Set C if < 'A'
+    1194/     812 : C9                  	RET
+    1195/     813 :                     ;
+    1196/     813 :                     ; Display the user process registers
+    1197/     813 :                     ;
+    1198/     813 : 2A A6 FF            REGDIS:	LHLD	BC		; Get saved BC pair
+    1199/     816 : 01 43 42            	LXI	B,'BC'		; And register names
+    1200/     819 : CD 88 08            	CALL	OUTPT		; Output
+    1201/     81C : 2A A4 FF            	LHLD	DE		; Get saved DE pair
+    1202/     81F : 01 45 44            	LXI	B,'DE'		; And register names
+    1203/     822 : CD 88 08            	CALL	OUTPT		; Output
+    1204/     825 : 2A A2 FF            	LHLD	HL		; Get saved HL pair
+    1205/     828 : 01 4C 48            	LXI	B,'HL'		; And register names
+    1206/     82B : CD 88 08            	CALL	OUTPT		; Output
+    1207/     82E : 2A AA FF            	LHLD	SP		; Get saved SP
+    1208/     831 : 01 50 53            	LXI	B,'SP'		; And register name
+    1209/     834 : CD 88 08            	CALL	OUTPT		; Output
+    1210/     837 : 2A AC FF            	LHLD	PC		; Get saved PC
+    1211/     83A : 01 43 50            	LXI	B,'PC'		; And regsiter name
+    1212/     83D : CD 88 08            	CALL	OUTPT		; Output
+    1213/     840 : CD 58 0F            	CALL	PRTMSG		; Output message
+    1214/     843 : 20 50 53 57 3D 00   	DB	" PSW=",0
+    1215/     849 : 2A A8 FF            	LHLD	PSW		; Get saved PSW
+    1216/     84C : CD 95 08            	CALL	HLOUT2		; Output value (with two spaces)
+    1217/     84F : CD 58 0F            	CALL	PRTMSG		; Output
+    1218/     852 : 20 46 4C 41 47 53   	DB	" FLAGS=",0
+                    3D 00 
+    1219/     85A : 2A A7 FF            	LHLD	PSW-1		; Get Flags to H
+    1220/     85D : 06 53               	MVI	B,'S'		; 'S' flag
+    1221/     85F : CD A0 08            	CALL	OUTB		; Display
+    1222/     862 : 06 5A               	MVI	B,'Z'		; 'Z' flag
+    1223/     864 : CD A0 08            	CALL	OUTB		; Display
+    1224/     867 : 06 4B               	MVI	B,'K'		; 'K' flag
+    1225/     869 : CD A0 08            	CALL	OUTB		; Display
+    1226/     86C : 06 41               	MVI	B,'A'		; 'A' flag
+    1227/     86E : CD A0 08            	CALL	OUTB		; Display
+    1228/     871 : 06 33               	MVI	B,'3'		; 3. bit flag
+    1229/     873 : CD A0 08            	CALL	OUTB		; Display
+    1230/     876 : 06 50               	MVI	B,'P'		; 'P' flag
+    1231/     878 : CD A0 08            	CALL	OUTB		; Display
+    1232/     87B : 06 56               	MVI	B,'V'		; 'V' flag
+    1233/     87D : CD A0 08            	CALL	OUTB		; Display
+    1234/     880 : 06 43               	MVI	B,'C'		; 'C' flag
+    1235/     882 : CD A0 08            	CALL	OUTB		; Display
+    1236/     885 : C3 A3 0F            	JMP	CRLF		; New line & exit
+    1237/     888 :                     ; Display contents of a register pair
+    1238/     888 : 78                  OUTPT:	MOV	A,B		; Get first char of name
+    1239/     889 : CD AA 0F            	CALL	OUT		; Output
+    1240/     88C : 79                  	MOV	A,C		; Get second char of name
+    1241/     88D : CD AA 0F            	CALL	OUT		; Output
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 22 - 1/25/2012 21:31:36
+
+
+    1242/     890 : 3E 3D               	MVI	A,'='		; Get separator
+    1243/     892 : CD AA 0F            	CALL	OUT		; Output
+    1244/     895 : CD 40 0F            HLOUT2:	CALL	HLOUT		; Output value
+    1245/     898 : CD 9B 08            	CALL	SPACE		; Output a space
+    1246/     89B :                     ; Display a space on the console
+    1247/     89B : 3E 20               SPACE:	MVI	A,' '		; Get a spave
+    1248/     89D : C3 AA 0F            	JMP	OUT		; Display it
+    1249/     8A0 :                     ; Display an individual flag bit B=title, H[7]=bit
+    1250/     8A0 : 29                  OUTB:	DAD	H		; Shift H[7] into carry
+    1251/     8A1 : 3E 2D               	MVI	A,'-'		; Dash for not set flag
+    1252/     8A3 : D2 AA 0F            	JNC	OUT		; Display dash
+    1253/     8A6 : 78                  	MOV	A,B		; Get character
+    1254/     8A7 : C3 AA 0F            	JMP	OUT		; And display
+    1255/     8AA :                     ;
+    1256/     8AA :                     ; Display an instruction in disassembly format
+    1257/     8AA :                     ;
+    1258/     8AA : D5                  DINST:	PUSH	D		; Save address
+    1259/     8AB : 7A                  	MOV	A,D		; Get high value
+    1260/     8AC : CD 45 0F            	CALL	HPR		; Output
+    1261/     8AF : 7B                  	MOV	A,E		; Get low address
+    1262/     8B0 : CD 45 0F            	CALL	HPR		; Output
+    1263/     8B3 : CD 9B 08            	CALL	SPACE		; Output a space
+    1264/     8B6 : CD 37 09            	CALL	LOOK		; Lookup instruction
+    1265/     8B9 : E6 03               	ANI	03h		; Save length
+    1266/     8BB : F5                  	PUSH	PSW		; Save length
+    1267/     8BC : E5                  	PUSH	H		; Save table address
+    1268/     8BD : 06 04               	MVI	B,4		; 4 spaces total
+    1269/     8BF : 4F                  	MOV	C,A		; Save count
+    1270/     8C0 : 1B                  	DCX	D		; Backup address
+    1271/     8C1 :                     ; Display the opcode bytes in HEX
+    1272/     8C1 : 13                  VLP1:	INX	D		; Advance
+    1273/     8C2 : 1A                  	LDAX	D		; Get opcode
+    1274/     8C3 : CD 45 0F            	CALL	HPR		; Output in HEX
+    1275/     8C6 : CD 9B 08            	CALL	SPACE		; Separator
+    1276/     8C9 : 05                  	DCR	B		; Reduce count
+    1277/     8CA : 0D                  	DCR	C		; Reduce count of opcodes
+    1278/     8CB : C2 C1 08            	JNZ	VLP1		; Do them all
+    1279/     8CE :                     ; Fill in to boundary
+    1280/     8CE : CD 9B 08            VLP2:	CALL	SPACE		; Space over
+    1281/     8D1 : CD 9B 08            	CALL	SPACE		; Space over
+    1282/     8D4 : CD 9B 08            	CALL	SPACE		; Spave over
+    1283/     8D7 : 05                  	DCR	B		; Reduce count
+    1284/     8D8 : C2 CE 08            	JNZ	VLP2		; Do them all
+    1285/     8DB :                     ; DISPLAY ASCII equivalent of opcodes
+    1286/     8DB : C1                  	POP	B		; Restore table address
+    1287/     8DC : F1                  	POP	PSW		; Restore type/length
+    1288/     8DD : D1                  	POP	D		; Restore instruction address
+    1289/     8DE : D5                  	PUSH	D		; Resave
+    1290/     8DF : F5                  	PUSH	PSW		; Resave
+    1291/     8E0 : 26 08               	MVI	H,8		; 8 spaces/field
+    1292/     8E2 : E6 0F               	ANI	0Fh		; Save only length
+    1293/     8E4 : 6F                  	MOV	L,A		; Save for later
+    1294/     8E5 : 1A                  PCHR:	LDAX	D		; Get byte from opcode
+    1295/     8E6 : 13                  	INX	D		; Advance
+    1296/     8E7 : CD 94 0F            	CALL	OUTP		; Display (if printable)
+    1297/     8EA : 25                  	DCR	H		; Reduce field count
+    1298/     8EB : 2D                  	DCR	L		; Reduce opcode count
+    1299/     8EC : C2 E5 08            	JNZ	PCHR		; Do them all
+    1300/     8EF :                     ; Space over to instruction address
+    1301/     8EF : CD 9B 08            SPLP:	CALL	SPACE		; Output a space
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 23 - 1/25/2012 21:31:36
+
+
+    1302/     8F2 : 25                  	DCR	H		; Reduce count
+    1303/     8F3 : C2 EF 08            	JNZ	SPLP		; Do them all
+    1304/     8F6 : 16 06               	MVI	D,6		; Field width
+    1305/     8F8 : 0A                  VLP3:	LDAX	B		; Get char from table
+    1306/     8F9 : A7                  	ANA	A		; End of string?
+    1307/     8FA : CA 11 09            	JZ	VOUT1		; Yes, exit
+    1308/     8FD : CD AA 0F            	CALL	OUT		; Output it
+    1309/     900 : 03                  	INX	B		; Advance to next
+    1310/     901 : 15                  	DCR	D		; reduce count
+    1311/     902 : FE 20               	CPI	' '		; end of name?
+    1312/     904 : C2 F8 08            	JNZ	VLP3		; no, keep going
+    1313/     907 :                     ; Fill in name field with spaces
+    1314/     907 : 15                  VOUT:	DCR	D		; reduce count
+    1315/     908 : CA F8 08            	JZ	VLP3		; Keep going
+    1316/     90B : CD 9B 08            	CALL	SPACE		; Output a space
+    1317/     90E : C3 07 09            	JMP	VOUT		; And proceed
+    1318/     911 :                     ; Output operands for the instruction
+    1319/     911 : F1                  VOUT1:	POP	PSW		; Restore type
+    1320/     912 : D1                  	POP	D		; Restore instruction address
+    1321/     913 : 3D                  	DCR	A		; Is it type1?
+    1322/     914 : CA 27 09            	JZ	T1		; Yes, handle it
+    1323/     917 :                     ; Type 2 -  One byte immediate date
+    1324/     917 : F5                  T2:	PUSH	PSW		; Save type
+    1325/     918 : 3E 24               	MVI	A,'$'		; Get HEX indicator
+    1326/     91A : CD AA 0F            	CALL	OUT		; Output
+    1327/     91D : F1                  	POP	PSW		; Restore type
+    1328/     91E : 3D                  	DCR	A		; Type 2?
+    1329/     91F : C2 29 09            	JNZ	T3		; No, try next
+    1330/     922 : 13                  	INX	D		; Advance to data
+    1331/     923 : 1A                  	LDAX	D		; Get data
+    1332/     924 : CD 45 0F            	CALL	HPR		; Output in HEX
+    1333/     927 :                     ; Type 1 - No operand
+    1334/     927 : 13                  T1:	INX	D
+    1335/     928 : C9                  	RET
+    1336/     929 :                     ; Type 3 - Two bytes immediate data
+    1337/     929 : 13                  T3:	INX	D		; Skip to low	
+    1338/     92A : 13                  	INX	D		; Skip to high
+    1339/     92B : 1A                  	LDAX	D		; Get HIGH
+    1340/     92C : CD 45 0F            	CALL	HPR		; Output
+    1341/     92F : 1B                  	DCX	D		; Backup to low
+    1342/     930 : 1A                  	LDAX	D		; Get LOW
+    1343/     931 : CD 45 0F            	CALL	HPR		; Output
+    1344/     934 : 13                  	INX	D		; Advance to high
+    1345/     935 : 13                  	INX	D
+    1346/     936 : C9                  	RET
+    1347/     937 :                     ;
+    1348/     937 :                     ; Look up instruction in table & return TYPE/LENGTH[A], and string[HL]
+    1349/     937 :                     ;
+    1350/     937 : D5                  LOOK:	PUSH	D		; Save DE
+    1351/     938 : 1A                  	LDAX	D		; Get opcode
+    1352/     939 : 47                  	MOV	B,A		; Save for later
+    1353/     93A : 21 A9 09            	LXI	H,ITABLE	; Point to table
+    1354/     93D : 78                  LOOK1:	MOV	A,B		; Get Opcode
+    1355/     93E : A6                  	ANA	M		; Mask
+    1356/     93F : 23                  	INX	H		; Skip mask
+    1357/     940 : BE                  	CMP	M		; Does it match
+    1358/     941 : 23                  	INX	H		; Skip opcode
+    1359/     942 : CA 4E 09            	JZ	LOOK3		; Yes, we found it
+    1360/     945 :                     ; This wasn't it, advance to the next
+    1361/     945 : 7E                  LOOK2:	MOV	A,M		; Get byte
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 24 - 1/25/2012 21:31:36
+
+
+    1362/     946 : 23                  	INX	H		; Advance to next
+    1363/     947 : A7                  	ANA	A		; End of string?
+    1364/     948 : C2 45 09            	JNZ	LOOK2		; No, keep looking
+    1365/     94B : C3 3D 09            	JMP	LOOK1		; And continue
+    1366/     94E :                     ; We found the instruction, copy over the text description
+    1367/     94E : 4E                  LOOK3:	MOV	C,M		; Save type
+    1368/     94F : 23                  	INX	H		; Skip type
+    1369/     950 : 11 D0 FF            	LXI	D,BUFFER	; Point to text buffer
+    1370/     953 : 7E                  LOOK4:	MOV	A,M		; Get char from source
+    1371/     954 : 23                  	INX	H		; Advance to next
+    1372/     955 :                     ; Insert a RESTART vector number
+    1373/     955 : FE 76               	CPI	'v'		; Restart vector
+    1374/     957 : C2 65 09            	JNZ	LOOK5		; No, its OK
+    1375/     95A : 78                  	MOV	A,B		; Get opcode
+    1376/     95B : 0F                  	RRC			; Shift it
+    1377/     95C : 0F                  	RRC			; Over
+    1378/     95D : 0F                  	RRC			; To low digit
+    1379/     95E : E6 07               	ANI	07h		; Remove trash
+    1380/     960 : C6 30               	ADI	'0'		; Convert to digit
+    1381/     962 : C3 9D 09            	JMP	LOOK10		; And set the character
+    1382/     965 :                     ; Insert a register pair name
+    1383/     965 : FE 70               LOOK5:	CPI	'p'		; Register PAIR?
+    1384/     967 : C2 78 09            	JNZ	LOOK6		; No, try next
+    1385/     96A : 78                  	MOV	A,B		; Get opcode
+    1386/     96B : 0F                  	RRC			; Shift
+    1387/     96C : 0F                  	RRC			; Over into
+    1388/     96D : 0F                  	RRC			; Low digit
+    1389/     96E : 0F                  	RRC			; For lookup
+    1390/     96F : E6 03               	ANI	03h		; Save only RP
+    1391/     971 : E5                  	PUSH	H		; Save HL
+    1392/     972 : 21 56 00            	LXI	H,RPTAB		; Point to pair table
+    1393/     975 : C3 90 09            	JMP	LOOK9		; And proceed
+    1394/     978 :                     ; Insert destination register name
+    1395/     978 : FE 64               LOOK6:	CPI	'd'		; Set destination?
+    1396/     97A : C2 84 09            	JNZ	LOOK7		; No, try next
+    1397/     97D : 78                  	MOV	A,B		; Get opcode
+    1398/     97E : 0F                  	RRC			; Shift
+    1399/     97F : 0F                  	RRC			; Into low
+    1400/     980 : 0F                  	RRC			; digit
+    1401/     981 : C3 8A 09            	JMP	LOOK8		; And proceed
+    1402/     984 :                     ; Insert source register name
+    1403/     984 : FE 73               LOOK7:	CPI	's'		; Source register?
+    1404/     986 : C2 9D 09            	JNZ	LOOK10		; No, its OK
+    1405/     989 : 78                  	MOV	A,B		; Get opcode
+    1406/     98A :                     ; Lookup a general processor register
+    1407/     98A : E6 07               LOOK8:	ANI	07h		; Save only source
+    1408/     98C : E5                  	PUSH	H		; Save HL
+    1409/     98D : 21 4E 00            	LXI	H,RTAB		; Point to table
+    1410/     990 :                     ; Lookup register in table
+    1411/     990 : 85                  LOOK9:	ADD	L		; Offset to value
+    1412/     991 : 6F                  	MOV	L,A		; Resave address
+    1413/     992 : 7E                  	MOV	A,M		; Get character
+    1414/     993 : FE 53               	CPI	'S'		; 'SP' register ?
+    1415/     995 : C2 9C 09            	JNZ	LOOK9A		; No, skip
+    1416/     998 : 12                  	STAX	D		; Save 'S'
+    1417/     999 : 13                  	INX	D		; Advance to next
+    1418/     99A : 3E 50               	MVI	A,'P'		; Character 'P'
+    1419/     99C : E1                  LOOK9A:	POP	H		; Restore HL
+    1420/     99D :                     ; Save character in destination string
+    1421/     99D : 12                  LOOK10:	STAX	D		; Save value
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 25 - 1/25/2012 21:31:36
+
+
+    1422/     99E : 13                  	INX	D		; Advance to next
+    1423/     99F : A7                  	ANA	A		; End of list?
+    1424/     9A0 : C2 53 09            	JNZ	LOOK4		; No, keep copying
+    1425/     9A3 :                     ; End of LIST
+    1426/     9A3 : 21 D0 FF            	LXI	H,BUFFER	; Point to description
+    1427/     9A6 : 79                  	MOV	A,C		; Get length
+    1428/     9A7 : D1                  	POP	D		; Restore DE
+    1429/     9A8 : C9                  	RET
+    1430/     9A9 :                     ;
+    1431/     9A9 :                     ; Opcode disassembly table: MASK, OPCODE, TYPE/LENGTH, STRINGZ
+    1432/     9A9 :                     ;
+    1433/     9A9 : FF FE 02            ITABLE:	DB	0FFh,0FEh,02h
+    1434/     9AC : 43 50 49 20 00      	DB	"CPI ",0
+    1435/     9B1 : FF 3A 03            	DB	0FFh,3Ah,03h
+    1436/     9B4 : 4C 44 41 20 00      	DB	"LDA ",0
+    1437/     9B9 : FF 32 03            	DB	0FFh,32h,03h
+    1438/     9BC : 53 54 41 20 00      	DB	"STA ",0
+    1439/     9C1 : FF 2A 03            	DB	0FFh,2Ah,03h
+    1440/     9C4 : 4C 48 4C 44 20 00   	DB	"LHLD ",0
+    1441/     9CA : FF 22 03            	DB	0FFh,22h,03h
+    1442/     9CD : 53 48 4C 44 20 00   	DB	"SHLD ",0
+    1443/     9D3 : FF F5 01            	DB	0FFh,0F5h,01h
+    1444/     9D6 : 50 55 53 48 20 50   	DB	"PUSH PSW",0
+                    53 57 00 
+    1445/     9DF : FF F1 01            	DB	0FFh,0F1h,01h
+    1446/     9E2 : 50 4F 50 20 50 53   	DB	"POP PSW",0
+                    57 00 
+    1447/     9EA : FF 27 01            	DB	0FFh,27h,01h
+    1448/     9ED : 44 41 41 00         	DB	"DAA",0
+    1449/     9F1 : FF 76 01            	DB	0FFh,76h,01h
+    1450/     9F4 : 48 4C 54 00         	DB	"HLT",0
+    1451/     9F8 : FF FB 01            	DB	0FFh,0FBh,01h
+    1452/     9FB : 45 49 00            	DB	"EI",0
+    1453/     9FE : FF F3 01            	DB	0FFh,0F3h,01h
+    1454/     A01 : 44 49 00            	DB	"DI",0
+    1455/     A04 : FF 37 01            	DB	0FFh,37h,01h
+    1456/     A07 : 53 54 43 00         	DB	"STC",0
+    1457/     A0B : FF 3F 01            	DB	0FFh,3Fh,01h
+    1458/     A0E : 43 4D 43 00         	DB	"CMC",0
+    1459/     A12 : FF 2F 01            	DB	0FFh,2Fh,01h
+    1460/     A15 : 43 4D 41 00         	DB	"CMA",0
+    1461/     A19 : FF EB 01            	DB	0FFh,0EBh,01h
+    1462/     A1C : 58 43 48 47 00      	DB	"XCHG",0
+    1463/     A21 : FF E3 01            	DB	0FFh,0E3h,01h
+    1464/     A24 : 58 54 48 4C 00      	DB	"XTHL",0
+    1465/     A29 : FF F9 01            	DB	0FFh,0F9h,01h
+    1466/     A2C : 53 50 48 4C 00      	DB	"SPHL",0
+    1467/     A31 : FF E9 01            	DB	0FFh,0E9h,01h
+    1468/     A34 : 50 43 48 4C 00      	DB	"PCHL",0
+    1469/     A39 : FF DB 02            	DB	0FFh,0DBh,02h
+    1470/     A3C : 49 4E 20 00         	DB	"IN ",0
+    1471/     A40 : FF D3 02            	DB	0FFh,0D3h,02h
+    1472/     A43 : 4F 55 54 20 00      	DB	"OUT ",0
+    1473/     A48 : FF 07 01            	DB	0FFh,07h,01h
+    1474/     A4B : 52 4C 43 00         	DB	"RLC",0
+    1475/     A4F : FF 0F 01            	DB	0FFh,0Fh,01h
+    1476/     A52 : 52 52 43 00         	DB	"RRC",0
+    1477/     A56 : FF 17 01            	DB	0FFh,17h,01h
+    1478/     A59 : 52 41 4C 00         	DB	"RAL",0
+    1479/     A5D : FF 1F 01            	DB	0FFh,1Fh,01h
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 26 - 1/25/2012 21:31:36
+
+
+    1480/     A60 : 52 41 52 00         	DB	"RAR",0
+    1481/     A64 : FF C6 02            	DB	0FFh,0C6h,02h
+    1482/     A67 : 41 44 49 20 00      	DB	"ADI ",0
+    1483/     A6C : FF CE 02            	DB	0FFh,0CEh,02h
+    1484/     A6F : 41 43 49 20 00      	DB	"ACI ",0
+    1485/     A74 : FF D6 02            	DB	0FFh,0D6h,02h
+    1486/     A77 : 53 55 49 20 00      	DB	"SUI ",0
+    1487/     A7C : FF DE 02            	DB	0FFh,0DEh,02h
+    1488/     A7F : 53 42 49 20 00      	DB	"SBI ",0
+    1489/     A84 : FF E6 02            	DB	0FFh,0E6h,02h
+    1490/     A87 : 41 4E 49 20 00      	DB	"ANI ",0
+    1491/     A8C : FF F6 02            	DB	0FFh,0F6h,02h
+    1492/     A8F : 4F 52 49 20 00      	DB	"ORI ",0
+    1493/     A94 : FF EE 02            	DB	0FFh,0EEh,02h
+    1494/     A97 : 58 52 49 20 00      	DB	"XRI ",0
+    1495/     A9C : FF 00 01            	DB	0FFh,00h,01h
+    1496/     A9F : 4E 4F 50 00         	DB	"NOP",0
+    1497/     AA3 :                     ; 8085 specific instructions
+    1498/     AA3 : FF 20 01            	DB	0FFh,20h,01h
+    1499/     AA6 : 52 49 4D 00         	DB	"RIM",0
+    1500/     AAA : FF 30 01            	DB	0FFh,30h,01h
+    1501/     AAD : 53 49 4D 00         	DB	"SIM",0
+    1502/     AB1 :                     ; 8085 undocumented instructions
+    1503/     AB1 : FF 08 01            	DB	0FFh,08h,01h
+    1504/     AB4 : 44 53 55 42 20 42   	DB	"DSUB B",0
+                    00 
+    1505/     ABB : FF 10 01            	DB	0FFh,10h,01h
+    1506/     ABE : 41 52 48 4C 00      	DB	"ARHL",0
+    1507/     AC3 : FF 18 01            	DB	0FFh,18h,01h
+    1508/     AC6 : 52 44 45 4C 00      	DB	"RDEL",0
+    1509/     ACB : FF 28 02            	DB	0FFh,28h,02h
+    1510/     ACE : 4C 44 48 49 20 00   	DB	"LDHI ",0
+    1511/     AD4 : FF 38 02            	DB	0FFh,38h,02h
+    1512/     AD7 : 4C 44 53 49 20 00   	DB	"LDSI ",0
+    1513/     ADD : FF CB 01            	DB	0FFh,0CBh,01h
+    1514/     AE0 : 52 53 54 56 00      	DB	"RSTV",0
+    1515/     AE5 : FF D9 01            	DB	0FFh,0D9h,01h
+    1516/     AE8 : 53 48 4C 58 20 44   	DB	"SHLX D",0
+                    00 
+    1517/     AEF : FF DD 03            	DB	0FFh,0DDh,03h
+    1518/     AF2 : 4A 4E 4B 20 00      	DB	"JNK ",0
+    1519/     AF7 : FF ED 01            	DB	0FFh,0EDh,01h
+    1520/     AFA : 4C 48 4C 58 20 44   	DB	"LHLX D",0
+                    00 
+    1521/     B01 : FF FD 03            	DB	0FFh,0FDh,03h
+    1522/     B04 : 4A 4B 20 00         	DB	"JK ",0
+    1523/     B08 :                     ; Jumps, Calls & Returns
+    1524/     B08 : FF C3 0B            	DB	0FFh,0C3h,0Bh
+    1525/     B0B : 4A 4D 50 20 00      	DB	"JMP ",0
+    1526/     B10 : FF CA 43            	DB	0FFh,0CAh,43h
+    1527/     B13 : 4A 5A 20 00         	DB	"JZ ",0
+    1528/     B17 : FF C2 4B            	DB	0FFh,0C2h,4Bh
+    1529/     B1A : 4A 4E 5A 20 00      	DB	"JNZ ",0
+    1530/     B1F : FF DA 13            	DB	0FFh,0DAh,13h
+    1531/     B22 : 4A 43 20 00         	DB	"JC ",0
+    1532/     B26 : FF D2 1B            	DB	0FFh,0D2h,1Bh
+    1533/     B29 : 4A 4E 43 20 00      	DB	"JNC ",0
+    1534/     B2E : FF EA 23            	DB	0FFh,0EAh,23h
+    1535/     B31 : 4A 50 45 20 00      	DB	"JPE ",0
+    1536/     B36 : FF E2 2B            	DB	0FFh,0E2h,2Bh
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 27 - 1/25/2012 21:31:36
+
+
+    1537/     B39 : 4A 50 4F 20 00      	DB	"JPO ",0
+    1538/     B3E : FF FA 83            	DB	0FFh,0FAh,83h
+    1539/     B41 : 4A 4D 20 00         	DB	"JM ",0
+    1540/     B45 : FF F2 8B            	DB	0FFh,0F2h,8Bh
+    1541/     B48 : 4A 50 20 00         	DB	"JP ",0
+    1542/     B4C : FF CD 0B            	DB	0FFh,0CDh,0Bh
+    1543/     B4F : 43 41 4C 4C 20 00   	DB	"CALL ",0
+    1544/     B55 : FF CC 43            	DB	0FFh,0CCh,43h
+    1545/     B58 : 43 5A 20 00         	DB	"CZ ",0
+    1546/     B5C : FF C4 4B            	DB	0FFh,0C4h,4Bh
+    1547/     B5F : 43 4E 5A 20 00      	DB	"CNZ ",0
+    1548/     B64 : FF DC 13            	DB	0FFh,0DCh,13h
+    1549/     B67 : 43 43 20 00         	DB	"CC ",0
+    1550/     B6B : FF D4 1B            	DB	0FFh,0D4h,1Bh
+    1551/     B6E : 43 4E 43 20 00      	DB	"CNC ",0
+    1552/     B73 : FF EC 23            	DB	0FFh,0ECh,23h
+    1553/     B76 : 43 50 45 20 00      	DB	"CPE ",0
+    1554/     B7B : FF E4 2B            	DB	0FFh,0E4h,2Bh
+    1555/     B7E : 43 50 4F 20 00      	DB	"CPO ",0
+    1556/     B83 : FF FC 83            	DB	0FFh,0FCh,83h
+    1557/     B86 : 43 4D 20 00         	DB	"CM ",0
+    1558/     B8A : FF F4 8B            	DB	0FFh,0F4h,8Bh
+    1559/     B8D : 43 50 20 00         	DB	"CP ",0
+    1560/     B91 : FF C9 05            	DB	0FFh,0C9h,05h
+    1561/     B94 : 52 45 54 00         	DB	"RET",0
+    1562/     B98 : FF C8 45            	DB	0FFh,0C8h,45h
+    1563/     B9B : 52 5A 00            	DB	"RZ",0
+    1564/     B9E : FF C0 4D            	DB	0FFh,0C0h,4Dh
+    1565/     BA1 : 52 4E 5A 00         	DB	"RNZ",0
+    1566/     BA5 : FF D8 15            	DB	0FFh,0D8h,15h
+    1567/     BA8 : 52 43 00            	DB	"RC",0
+    1568/     BAB : FF D0 1D            	DB	0FFh,0D0h,1Dh
+    1569/     BAE : 52 4E 43 00         	DB	"RNC",0
+    1570/     BB2 : FF E8 25            	DB	0FFh,0E8h,25h
+    1571/     BB5 : 52 50 45 00         	DB	"RPE",0
+    1572/     BB9 : FF E0 2D            	DB	0FFh,0E0h,2Dh
+    1573/     BBC : 52 50 4F 00         	DB	"RPO",0
+    1574/     BC0 : FF F8 85            	DB	0FFh,0F8h,85h
+    1575/     BC3 : 52 4D 00            	DB	"RM",0
+    1576/     BC6 : FF F0 8D            	DB	0FFh,0F0h,8Dh
+    1577/     BC9 : 52 50 00            	DB	"RP",0
+    1578/     BCC :                     ; Register based instructions
+    1579/     BCC : C0 40 01            	DB	0C0h,40h,01h
+    1580/     BCF : 4D 4F 56 20 64 2C   	DB	"MOV d,s",0
+                    73 00 
+    1581/     BD7 : C7 06 02            	DB	0C7h,06h,02h
+    1582/     BDA : 4D 56 49 20 64 2C   	DB	"MVI d,",0
+                    00 
+    1583/     BE1 : F8 90 01            	DB	0F8h,90h,01h
+    1584/     BE4 : 53 55 42 20 73 00   	DB	"SUB s",0
+    1585/     BEA : F8 98 01            	DB	0F8h,98h,01h
+    1586/     BED : 53 42 42 20 73 00   	DB	"SBB s",0
+    1587/     BF3 : F8 80 01            	DB	0F8h,80h,01h
+    1588/     BF6 : 41 44 44 20 73 00   	DB	"ADD s",0
+    1589/     BFC : F8 88 01            	DB	0F8h,88h,01h
+    1590/     BFF : 41 44 43 20 73 00   	DB	"ADC s",0
+    1591/     C05 : F8 A0 01            	DB	0F8h,0A0h,01h
+    1592/     C08 : 41 4E 41 20 73 00   	DB	"ANA s",0
+    1593/     C0E : F8 B0 01            	DB	0F8h,0B0h,01h
+    1594/     C11 : 4F 52 41 20 73 00   	DB	"ORA s",0
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 28 - 1/25/2012 21:31:36
+
+
+    1595/     C17 : F8 A8 01            	DB	0F8h,0A8h,01h
+    1596/     C1A : 58 52 41 20 73 00   	DB	"XRA s",0
+    1597/     C20 : F8 B8 01            	DB	0F8h,0B8h,01h
+    1598/     C23 : 43 4D 50 20 73 00   	DB	"CMP s",0
+    1599/     C29 : C7 04 01            	DB	0C7h,04h,01h
+    1600/     C2C : 49 4E 52 20 64 00   	DB	"INR d",0
+    1601/     C32 : C7 05 01            	DB	0C7h,05h,01h
+    1602/     C35 : 44 43 52 20 64 00   	DB	"DCR d",0
+    1603/     C3B :                     ; Register pair instructions
+    1604/     C3B : CF 01 03            	DB	0CFh,01h,03h
+    1605/     C3E : 4C 58 49 20 70 2C   	DB	"LXI p,",0
+                    00 
+    1606/     C45 : EF 0A 01            	DB	0EFh,0Ah,01h
+    1607/     C48 : 4C 44 41 58 20 70   	DB	"LDAX p",0
+                    00 
+    1608/     C4F : EF 02 01            	DB	0EFh,02h,01h
+    1609/     C52 : 53 54 41 58 20 70   	DB	"STAX p",0
+                    00 
+    1610/     C59 : CF 03 01            	DB	0CFh,03h,01h
+    1611/     C5C : 49 4E 58 20 70 00   	DB	"INX p",0
+    1612/     C62 : CF 0B 01            	DB	0CFh,0Bh,01h
+    1613/     C65 : 44 43 58 20 70 00   	DB	"DCX p",0
+    1614/     C6B : CF 09 01            	DB	0CFh,09h,01h
+    1615/     C6E : 44 41 44 20 70 00   	DB	"DAD p",0
+    1616/     C74 : CF C5 01            	DB	0CFh,0C5h,01h
+    1617/     C77 : 50 55 53 48 20 70   	DB	"PUSH p",0
+                    00 
+    1618/     C7E : CF C1 01            	DB	0CFh,0C1h,01h
+    1619/     C81 : 50 4F 50 20 70 00   	DB	"POP p",0
+    1620/     C87 :                     ; Restart instruction
+    1621/     C87 : C7 C7 01            	DB	0C7h,0C7h,01h
+    1622/     C8A : 52 53 54 20 76 00   	DB	"RST v",0
+    1623/     C90 :                     ; This entry always matches invalid opcodes
+    1624/     C90 : 00 00 01            	DB	00h,00h,01h
+    1625/     C93 : 44 42 20 00         	DB	"DB ",0
+    1626/     C97 :                     ; Misc Strings and messages
+    1627/     C97 : 4F 4E 20 00         ON:	DB	"ON ",0
+    1628/     C9B : 4F 46 46 00         OFF:	DB	"OFF",0
+    1629/     C9F : 41 55 54 4F 52 45   AUTMSG:	DB	"AUTOREG=",0
+                    47 3D 00 
+    1630/     CA8 : 20 53 55 42 54 52   SUBMSG:	DB	" SUBTRACE=",0
+                    41 43 45 3D 00 
+    1631/     CB3 : 20 54 52 41 43 45   TRCMSG:	DB	" TRACE=",0
+                    3D 00 
+    1632/     CBB : 4D 4F 4E 38 35 20   HTEXT:	DB	"MON85 Commands:"
+                    43 6F 6D 6D 61 6E 
+                    64 73 3A 
+    1633/     CCA : 0D 0A 00            	DB	0Dh,0Ah,0
+    1634/     CCD : 41 20 4F 4E 7C 4F   	DB	"A ON|OFF!Enable/Disable Automatic register display",0
+                    46 46 21 45 6E 61 
+                    62 6C 65 2F 44 69 
+                    73 61 62 6C 65 20 
+                    41 75 74 6F 6D 61 
+                    74 69 63 20 72 65 
+                    67 69 73 74 65 72 
+                    20 64 69 73 70 6C 
+                    61 79 00 
+    1635/     D00 : 42 20 5B 62 70 20   	DB	"B [bp address]!Set/Display breakpoints",0
+                    61 64 64 72 65 73 
+                    73 5D 21 53 65 74 
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 29 - 1/25/2012 21:31:36
+
+
+                    2F 44 69 73 70 6C 
+                    61 79 20 62 72 65 
+                    61 6B 70 6F 69 6E 
+                    74 73 00 
+    1636/     D27 : 43 20 3C 73 72 63   	DB	"C <src> <dest> <size>!Copy memory",0
+                    3E 20 3C 64 65 73 
+                    74 3E 20 3C 73 69 
+                    7A 65 3E 21 43 6F 
+                    70 79 20 6D 65 6D 
+                    6F 72 79 00 
+    1637/     D49 : 44 20 3C 61 64 64   	DB	"D <address>!Display memory in assembly format",0
+                    72 65 73 73 3E 21 
+                    44 69 73 70 6C 61 
+                    79 20 6D 65 6D 6F 
+                    72 79 20 69 6E 20 
+                    61 73 73 65 6D 62 
+                    6C 79 20 66 6F 72 
+                    6D 61 74 00 
+    1638/     D77 : 45 20 3C 61 64 64   	DB	"E <address>!Edit memory",0
+                    72 65 73 73 3E 21 
+                    45 64 69 74 20 6D 
+                    65 6D 6F 72 79 00 
+    1639/     D8F : 46 20 3C 73 74 61   	DB	"F <start> <end> <value>!Fill memory",0
+                    72 74 3E 20 3C 65 
+                    6E 64 3E 20 3C 76 
+                    61 6C 75 65 3E 21 
+                    46 69 6C 6C 20 6D 
+                    65 6D 6F 72 79 00 
+    1640/     DB3 : 47 20 5B 61 64 64   	DB	"G [address]!Begin/Resume execution",0
+                    72 65 73 73 5D 21 
+                    42 65 67 69 6E 2F 
+                    52 65 73 75 6D 65 
+                    20 65 78 65 63 75 
+                    74 69 6F 6E 00 
+    1641/     DD6 : 48 20 3C 73 74 61   	DB	"H <start> <end>!Send out memory in Intel HEX format",0
+                    72 74 3E 20 3C 65 
+                    6E 64 3E 21 53 65 
+                    6E 64 20 6F 75 74 
+                    20 6D 65 6D 6F 72 
+                    79 20 69 6E 20 49 
+                    6E 74 65 6C 20 48 
+                    45 58 20 66 6F 72 
+                    6D 61 74 00 
+    1642/     E0A : 49 20 3C 70 6F 72   	DB	"I <port>!Input from port",0
+                    74 3E 21 49 6E 70 
+                    75 74 20 66 72 6F 
+                    6D 20 70 6F 72 74 
+                    00 
+    1643/     E23 : 4C 20 5B 61 64 64   	DB	"L [address]!Load image into memory",0
+                    72 65 73 73 5D 21 
+                    4C 6F 61 64 20 69 
+                    6D 61 67 65 20 69 
+                    6E 74 6F 20 6D 65 
+                    6D 6F 72 79 00 
+    1644/     E46 : 4D 20 3C 61 64 64   	DB	"M <address>!Display memory in hex dump format",0
+                    72 65 73 73 3E 21 
+                    44 69 73 70 6C 61 
+                    79 20 6D 65 6D 6F 
+                    72 79 20 69 6E 20 
+                    68 65 78 20 64 75 
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 30 - 1/25/2012 21:31:36
+
+
+                    6D 70 20 66 6F 72 
+                    6D 61 74 00 
+    1645/     E74 : 4F 20 3C 70 6F 72   	DB	"O <port> <data>!Output to port",0
+                    74 3E 20 3C 64 61 
+                    74 61 3E 21 4F 75 
+                    74 70 75 74 20 74 
+                    6F 20 70 6F 72 74 
+                    00 
+    1646/     E93 : 52 20 5B 72 70 20   	DB	"R [rp value]!Set/Display program registers",0
+                    76 61 6C 75 65 5D 
+                    21 53 65 74 2F 44 
+                    69 73 70 6C 61 79 
+                    20 70 72 6F 67 72 
+                    61 6D 20 72 65 67 
+                    69 73 74 65 72 73 
+                    00 
+    1647/     EBE : 53 20 4F 4E 7C 4F   	DB	"S ON|OFF!Enable/Disable Subroutine trace",0
+                    46 46 21 45 6E 61 
+                    62 6C 65 2F 44 69 
+                    73 61 62 6C 65 20 
+                    53 75 62 72 6F 75 
+                    74 69 6E 65 20 74 
+                    72 61 63 65 00 
+    1648/     EE7 : 54 20 4F 4E 7C 4F   	DB	"T ON|OFF!Enable/Disable Trace mode",0
+                    46 46 21 45 6E 61 
+                    62 6C 65 2F 44 69 
+                    73 61 62 6C 65 20 
+                    54 72 61 63 65 20 
+                    6D 6F 64 65 00 
+    1649/     F0A : 55 20 5B 61 64 64   	DB	"U [address]!Set/Display program base address",0
+                    72 65 73 73 5D 21 
+                    53 65 74 2F 44 69 
+                    73 70 6C 61 79 20 
+                    70 72 6F 67 72 61 
+                    6D 20 62 61 73 65 
+                    20 61 64 64 72 65 
+                    73 73 00 
+    1650/     F37 : 00                  	DB	0
+    1651/     F38 :                     ;
+    1652/     F38 :                     ; Read a character, and wait for it
+    1653/     F38 :                     ;
+    1654/     F38 : CD B5 0F            INCHR:	CALL	IN		; Check for a character
+    1655/     F3B : A7                  	ANA	A		; Is there any data?
+    1656/     F3C : CA 38 0F            	JZ	INCHR		; Wait for it
+    1657/     F3F : C9                  	RET
+    1658/     F40 :                     ;
+    1659/     F40 :                     ; Display HL in hexidecimal
+    1660/     F40 :                     ;
+    1661/     F40 : 7C                  HLOUT:	MOV	A,H		; Get HIGH byte
+    1662/     F41 : CD 45 0F            	CALL	HPR		; Output
+    1663/     F44 : 7D                  	MOV	A,L		; Get LOW byte
+    1664/     F45 :                     ;
+    1665/     F45 :                     ; Display A in hexidecimal
+    1666/     F45 :                     ;
+    1667/     F45 : F5                  HPR:	PUSH	PSW		; Save low digit
+    1668/     F46 : 0F                  	RRC			; Shift
+    1669/     F47 : 0F                  	RRC			; high
+    1670/     F48 : 0F                  	RRC			; digit
+    1671/     F49 : 0F                  	RRC			; into low
+    1672/     F4A : CD 4E 0F            	CALL	HOUT		; Display a single digit
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 31 - 1/25/2012 21:31:36
+
+
+    1673/     F4D : F1                  	POP	PSW		; Restore low digit
+    1674/     F4E : E6 0F               HOUT:	ANI	0Fh		; Remove high digit
+    1675/     F50 : FE 0A               	CPI	10		; Convert to ASCII
+    1676/     F52 : DE 2F               	SBI	2Fh
+    1677/     F54 : 27                  	DAA
+    1678/     F55 : C3 AA 0F            	JMP	OUT		; And output it
+    1679/     F58 :                     ;
+    1680/     F58 :                     ; Display message [PC]
+    1681/     F58 :                     ;
+    1682/     F58 : E1                  PRTMSG:	POP	H		; Get address
+    1683/     F59 : CD 5D 0F            	CALL	PRTSTR		; Output message
+    1684/     F5C : E9                  	PCHL			; And return
+    1685/     F5D :                     ;
+    1686/     F5D :                     ; Display message [HL]
+    1687/     F5D :                     ;
+    1688/     F5D : 7E                  PRTSTR:	MOV	A,M		; Get byte from message
+    1689/     F5E : 23                  	INX	H		; Advance to next
+    1690/     F5F : A7                  	ANA	A		; End of message?
+    1691/     F60 : C8                  	RZ			; Yes, exit
+    1692/     F61 : CD AA 0F            	CALL	OUT		; Output the character
+    1693/     F64 : C3 5D 0F            	JMP	PRTSTR		; And proceed
+    1694/     F67 :                     ;
+    1695/     F67 :                     ; Handle output suspension
+    1696/     F67 :                     ;
+    1697/     F67 : CD A3 0F            CHKSUS:	CALL	CRLF		; New line
+    1698/     F6A : 3A AE FF            	LDA	OFLAG		; Is output suspended?
+    1699/     F6D : A7                  	ANA	A		; Test flag
+    1700/     F6E : C2 7F 0F            	JNZ	CHKS1		; Yes it is
+    1701/     F71 : CD B5 0F            	CALL	IN		; Test for CONTROL-C interrupt
+    1702/     F74 : FE 1B               	CPI	1Bh		; ESCAPE?
+    1703/     F76 : CA 8D 01            	JZ	REST		; Abort
+    1704/     F79 : FE 20               	CPI	' '		; SPACE - Suspend command
+    1705/     F7B : C0                  	RNZ
+    1706/     F7C : 32 AE FF            	STA	OFLAG		; Set the flag
+    1707/     F7F :                     ; Output is suspended, wait for command
+    1708/     F7F : CD 38 0F            CHKS1:	CALL	INCHR		; Get char
+    1709/     F82 : FE 20               	CPI	' '		; One line?
+    1710/     F84 : C8                  	RZ			; Allow it
+    1711/     F85 : FE 1B               	CPI	1Bh		; ESCAPE?
+    1712/     F87 : CA 8D 01            	JZ	REST		; Abort
+    1713/     F8A : FE 0D               	CPI	0Dh		; Resume?
+    1714/     F8C : C2 7F 0F            	JNZ	CHKS1		; Keep going
+    1715/     F8F : 97                  	SUB	A		; Reset flag
+    1716/     F90 : 32 AE FF            	STA	OFLAG		; Write it
+    1717/     F93 : C9                  	RET
+    1718/     F94 :                     ; Display a character if its printable
+    1719/     F94 : FE 20               OUTP:	CPI	' '		; < ' '
+    1720/     F96 : DA 9E 0F            	JC	OUTP1		; Invalid, exchange it
+    1721/     F99 : FE 7F               	CPI	7Fh		; Printable?
+    1722/     F9B : DA AA 0F            	JC	OUT		; Ok to display
+    1723/     F9E : 3E 2E               OUTP1:	MVI	A,'.'		; Set to DOT to indicate invalid
+    1724/     FA0 : C3 AA 0F            	JMP	OUT		; And display
+    1725/     FA3 :                     ;
+    1726/     FA3 :                     ; Write a Line-Feed and Carriage-Return to console
+    1727/     FA3 :                     ;
+    1728/     FA3 : 3E 0D               CRLF:	MVI	A,0Dh		; Carriage return
+    1729/     FA5 : CD AA 0F            	CALL	OUT		; Output
+    1730/     FA8 : 3E 0A               	MVI	A,0Ah		; Line-feed
+    1731/     FAA :                     ;
+    1732/     FAA :                     ; User supplied I/O routines.
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 32 - 1/25/2012 21:31:36
+
+
+    1733/     FAA :                     ;-----------------------------------------------------------
+    1734/     FAA :                     ; NOTE: "OUT" must appear first because "CRLF" falls into it.
+    1735/     FAA :                     ;
+    1736/     FAA :                     ; Write character in A to console (8251 uart)
+    1737/     FAA : F5                  OUT:	PUSH	PSW		; Save char
+    1738/     FAB : DB 09               OUT1:	IN	9		; Get 8251 status
+    1739/     FAD : 0F                  	RRC			; Test TX bit
+    1740/     FAE : D2 AB 0F            	JNC	OUT1		; Not ready
+    1741/     FB1 : F1                  	POP	PSW		; Restore char
+    1742/     FB2 : D3 08               	OUT	8		; Write 8251 data
+    1743/     FB4 : C9                  	RET
+    1744/     FB5 :                     ; Check for a character from the console (8251 uart)
+    1745/     FB5 : DB 09               IN:	IN	9		; Get 8251 status
+    1746/     FB7 : E6 02               	ANI	00000010b	; Test for ready
+    1747/     FB9 : C8                  	RZ			; No char
+    1748/     FBA : DB 08               	IN	8		; Get 8251 data
+    1749/     FBC : C9                  	RET
+    1750/     FBD :                     ;
+    1751/     FBD :                     ; Initialize the timer & uart
+    1752/     FBD :                     ;
+    1753/     FBD :                     ; 8251A initialisation, according to datasheet (3x 00h + RESET 040h)  
+    1754/     FBD : AF                  INIT:	XRA	A		; Insure not setup mode
+    1755/     FBE : D3 09               	OUT	9		; Write once
+    1756/     FC0 : D3 09               	OUT	9		; Write again (now in operate mode)
+    1757/     FC2 : D3 09               	OUT	9		; Write again (now in operate mode)
+    1758/     FC4 : 3E 40               	MVI	A,01000000b	; Reset
+    1759/     FC6 : D3 09               	OUT	9		; write it
+    1760/     FC8 : 3E 4E               	MVI	A,01001110b	; 8 data, 1 stop, x16
+    1761/     FCA : D3 09               	OUT	9		; Write it
+    1762/     FCC : 3E 15               	MVI	A,00010101b	; RTS,DTR,Enable RX,TX
+    1763/     FCE : D3 09               	OUT	9		; Write it
+    1764/     FD0 :                     ; starts timer in 8155 RIOT chip
+    1765/     FD0 :                     ; timer count rate 307200Hz, with divider 15360(3C00H)
+    1766/     FD0 :                     ; is the resulting interrupt rate exactly 20Hz
+    1767/     FD0 : AF                  I8155:	XRA	A		; counter low 8 bits
+    1768/     FD1 : D3 04               	OUT	04h
+    1769/     FD3 : 3E 7C               	MVI	A,7Ch		; counter high 6 bits + mode cont.square -> 0 1
+    1770/     FD5 : D3 05               	OUT	05h
+    1771/     FD7 : 3E C0               	MVI	A,0C0h		; 8155 mode, start timer,
+    1772/     FD9 : D3 00               	OUT	00h		; disable port C interrupts, all ports input
+    1773/     FDB : C9                  	RET
+    1774/     FDC :                     
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 33 - 1/25/2012 21:31:36
+
+
+  symbol table (* = unused):
+  ------------------------
+
+ AFLAG :                       FFB1 C |  AL2 :                          5A4 C |
+ AL3 :                          5AE C |  ALOOP :                        582 C |
+ ALP1 :                         588 C | *ARCHITECTURE :  i386-unknown-win32 - |
+ AUTMSG :                       C9F C |  AUTO :                         4BD C |
+ BC :                          FFA6 C | *BIGENDIAN :                      0 - |
+*BRANCHEXT :                      0 - |  BRKTAB :                      FFB2 C |
+ BUFFER :                      FFD0 C |  CALC :                         7D6 C |
+ CALC1 :                        7DE C |  CALC2 :                        7F7 C |
+ CALC3 :                        7FE C |  CALC8 :                        7CC C |
+ CALRET :                       3F2 C | *CARRY :                        3A9 C |
+*CASESENSITIVE :                  0 - |  CBC :                          471 C |
+ CDE :                          466 C |  CHG1 :                         449 C |
+ CHG2 :                         451 C |  CHKS1 :                        F7F C |
+ CHKSUS :                       F67 C |  COMP16 :                       53C C |
+*CONSTPI :        3.141592653589793 - |  COPY :                         542 C |
+ COPY1 :                        55C C |  COPY2 :                        569 C |
+ COPY3 :                        56E C |  CP :                           487 C |
+ CPC :                          498 C |  CRLF :                         FA3 C |
+ CSP :                          47C C |  CTABLE :                       1BB C |
+*DATE :                   1/25/2012 - |  DE :                          FFA4 C |
+ DINST :                        8AA C |  DISBRK :                       283 C |
+ DISLP :                        288 C |  DISON :                        2E8 C |
+ DLBAD :                        683 C |  DLEOF :                        719 C |
+ DLERR :                        764 C |  DLINT :                        6EB C |
+ DLINT1 :                       708 C | *DLMOT :                        6B1 C |
+ DLREC :                        6A4 C |  DLWAIT :                       694 C |
+ DLWAIT1 :                      696 C |  DMOT1 :                        6D9 C |
+ DRAM :                        FFA0 - |  DSTACK :                         0 - |
+ EDIT :                         4D8 C |  EDIT1 :                        4DB C |
+ EDIT2 :                        501 C |  EDIT3 :                        50C C |
+ ENFLG :                        3BE C |  ENTRY :                         5A C |
+ ERROR :                        1AA C |  FAKE :                         438 C |
+*FALSE :                          0 - |  FILL :                         51C C |
+ FILL1 :                        531 C |  FIXL :                          BA C |
+ FOUND :                         9C C | *FULLPMMU :                       1 - |
+ GETBYT :                       740 C |  GETCHI :                       7BB C |
+ GETCHR :                       7BC C |  GETN1 :                        762 C |
+ GETNIB :                       74D C |  GIVLF :                        2AD C |
+ GO :                           2FA C |  GODIS :                        5BD C |
+ GOJMP :                        3C7 C |  GOSET :                        321 C |
+*HAS64 :                          1 - | *HASDSP :                         0 - |
+*HASFPU :                         0 - | *HASPMMU :                        0 - |
+ HELP :                         1F1 C |  HELP1 :                        1F8 C |
+ HELP2 :                        1FA C |  HELP3 :                        20C C |
+ HELP4 :                        21E C |  HL :                          FFA2 C |
+ HLJMP :                        3FD C |  HLOUT :                        F40 C |
+ HLOUT2 :                       895 C |  HOUT :                         F4E C |
+ HPR :                          F45 C |  HTEXT :                        CBB C |
+*I8155 :                        FD0 C |  IN :                           FB5 C |
+ INCHR :                        F38 C | *INEXTMODE :                      0 - |
+ INIL1 :                        177 C |  INIT :                         FBD C |
+*INLWORDMODE :                    0 - | *INMAXMODE :                      0 - |
+ INPT :                         767 C |  INPT1 :                        76A C |
+ INPT2 :                        78D C |  INPT3 :                        793 C |
+ INPT4 :                        7A8 C |  INPUT :                        229 C |
+*INSRCMODE :                      0 - |  INST :                        FFCA C |
+*INSUPMODE :                      0 - |  ITABLE :                       9A9 C |
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 34 - 1/25/2012 21:31:36
+
+
+ JNKJK :                        373 C | *LISTON :                         1 - |
+ LOAD :                         661 C |  LOAD1 :                        66E C |
+ LOAD2 :                        677 C |  LOOK :                         937 C |
+ LOOK1 :                        93D C |  LOOK10 :                       99D C |
+ LOOK2 :                        945 C |  LOOK3 :                        94E C |
+ LOOK4 :                        953 C |  LOOK5 :                        965 C |
+ LOOK6 :                        978 C |  LOOK7 :                        984 C |
+ LOOK8 :                        98A C |  LOOK9 :                        990 C |
+ LOOK9A :                       99C C | *MACEXP :                         1 - |
+ MEMRY :                        57B C | *MOMCPU :                      8080 - |
+*MOMCPUNAME :                  8080 - | *NESTMAX :                      100 - |
+ NOADR :                        30A C |  NOBK :                          B5 C |
+ NOCOM :                        39B C |  NOFIX :                         C5 C |
+ NOHEX :                        303 C |  NOJNK :                        382 C |
+ NOPCHL :                       356 C |  NOPSH :                        3EC C |
+ NORES :                        41B C |  NORSTV :                       369 C |
+ NOTBRK :                        91 C |  NOTRC :                        40A C |
+ NOTSET :                       2A5 C |  OFF :                          C9B C |
+ OFLAG :                       FFAE C |  OKCH :                         457 C |
+ ON :                           C97 C |  ONOFF :                        4A3 C |
+ OUT :                          FAA C |  OUT1 :                         FAB C |
+ OUTB :                         8A0 C |  OUTP :                         F94 C |
+ OUTP1 :                        F9E C |  OUTPT :                        888 C |
+ OUTPUT :                       248 C | *PACKING :                        0 - |
+*PADDING :                        1 - |  PADR :                         3D6 C |
+ PARITY :                       3BB C |  PC :                          FFAC C |
+ PCHR :                         8E5 C |  PRTMSG :                       F58 C |
+ PRTSTR :                       F5D C |  PSW :                         FFA8 C |
+ RECR :                         18A C |  REGDIS :                       813 C |
+ REGIST :                       440 C | *RELAXED :                        0 - |
+ RESBP :                        40F C |  REST :                         18D C |
+ REST1 :                        19E C |  REST2 :                        1B2 C |
+ RETON :                        4BB C |  ROM :                            0 - |
+ RPTAB :                         56 C | *RST1 :                           8 C |
+*RST15 :                          C C | *RST2 :                          10 C |
+*RST25 :                         14 C | *RST3 :                          18 C |
+*RST35 :                         1C C | *RST4 :                          20 C |
+*RST5 :                          28 C | *RST55 :                         2C C |
+*RST6 :                          30 C | *RST65 :                         34 C |
+*RST7 :                          38 C | *RST75 :                         3C C |
+*RST8 :                          40 C |  RSTINT :                        44 C |
+ RTAB :                          4E C |  SBRLP :                        26F C |
+ SETBRK :                       25E C |  SETOF1 :                       728 C |
+ SETOFF :                       71B C |  SFLAG :                       FFB0 C |
+ SHXRC :                        62F C |  SHXRC1 :                       64B C |
+ SIGN :                         3AF C |  SKIP :                         7B0 C |
+ SNDHEX :                       5ED C |  SNDHX1 :                       603 C |
+ SNDHX2 :                       615 C |  SNDHX3 :                       61B C |
+ SP :                          FFAA C |  SPACE :                        89B C |
+ SPLP :                         8EF C |  SUBMSG :                       CA8 C |
+ SUBON :                        4C6 C |  T1 :                           927 C |
+*T2 :                           917 C |  T3 :                           929 C |
+ TEST :                         10B C |  TFLAG :                       FFAF C |
+*TIME :                    21:31:36 - |  TOCAP :                        7C0 C |
+ TOCAP1 :                       7C7 C |  TRACE :                        4CF C |
+*TRAP :                          24 C |  TRCMSG :                       CB3 C |
+ TRL :                           F3 C |  TRTB :                          DB C |
+*TRUE :                           1 - |  TRYBRK :                        85 C |
+ UBASE :                       FFA0 C |  USRB1 :                        5E4 C |
+ USRBASE :                      5CF C |  VALHEX :                       805 C |
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 35 - 1/25/2012 21:31:36
+
+
+*VERSION :                     142F - |  VLOOP :                        5C6 C |
+ VLP1 :                         8C1 C |  VLP2 :                         8CE C |
+ VLP3 :                         8F8 C |  VOUT :                         907 C |
+ VOUT1 :                        911 C |  ZERO :                         3B5 C |
+
+    242 symbols
+     47 unused symbols
+
+ AS V1.42 Beta [Bld 72] - source file mon85-v12-ncb85.asm - page 36 - 1/25/2012 21:31:36
+
+
+  codepages:
+  ----------
+
+STANDARD (0 changed characters)
+
+
+0.02 seconds assembly time
+
+   1774 lines source file
+      2 passes
+      0 errors
+      0 warnings

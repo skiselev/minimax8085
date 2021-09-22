@@ -1,0 +1,33 @@
+-------------------------------------------------------------------------------
+
+MON85: A software debugger for the 8080/8085 processor
+
+Copyright 1979-2007 Dave Dunfield
+All rights reserved.
+
+-------------------------------------------------------------------------------
+
+Version 1.2 - 2012 Roman Borik
+
+New in version 1.2
+ - Support for undocumented 8085 instructions.
+   DSUB B, ARHL, RDEL, LDHI s8, LDSI s8, LHLX D, SHLX D, JNK a16, JK a16, RSTV
+ - Command R displays all flags of F register (SZKA3PVC). If flag is not set
+   dash '-' is displayed.
+ - Added restart vector RST 8 (0040h) for possibility to handle RSTV jump.
+ - Changed TRACE mode. After entering TRACE mode, instruction on actual PC and
+   content of registers (if it is switched on) are displayed.
+   Entering a space ' ' executes this instruction, and returns to the 'T>'
+   prompt with the next instruction.
+ - Instructions LXI, DAD, INX, DCX displays argument 'SP' rather than 'S'.
+ - Commands that requires 1 byte parameter raises error if entered value
+   not fit to 1 byte.
+ - Command 'C' checks overlap of source and destination block and for copying
+   uses appropriate direction.
+ - Command 'F' checks <start> and <end> parameters and raises error,
+   if <end> is lower than <start>.
+ - Added command 'H' to send out memory content in Intel HEX format.
+ - Sending of LF and CR characters were reversed and are sent in the usual
+   order - CR first and followed by LF.
+
+-------------------------------------------------------------------------------
