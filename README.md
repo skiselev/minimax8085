@@ -128,23 +128,23 @@ Pin | Description
 
 #### SPLD Files and Programming
 
-As described above, the MiniMax8085 SBC uses a GAL16V8 simple programmable logic device (SPLD) to implement all the necessary glue logic. The SLPD images are available in Mini8085-SPLD-1.1.zip file in the downloads section below. Here are some files contained in that ZIP archive:
-* **Mini8085-3.072MHz.pld** - SPLD source code for a system with CPU running on 3.072 MHz or 6.144 MHz clock frequency. 
+As described above, the MiniMax8085 SBC uses a GAL16V8 simple programmable logic device (SPLD) to implement all the necessary glue logic. The SLPD sources and images (fuse maps are available [SPLD] folder of this GitHub repository:
+* [Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld) - SPLD source code for a system with CPU running on 3.072 MHz or 6.144 MHz clock frequency. 
+  * [Mini8085-3.072MHz.jed](SPLD/Mini8085-3.072MHz.jed) - SPLD fuse map for a system with CPU running on 3.072 MHz or 6.144 MHz clock frequency
   * When used with 6.144 MHz or 8 MHz CPU clock frequency, the USART clock will be doubled. So that it will work on 19200 bps instead of 9600 bps, or 38400 bps instead of 19200 bps.
-* **Mini8085-3.9936MHz.pld** - SPLD source code for a system with CPU running on 3.9936 MHz (4 MHz) or 8 MHz clock frequency
-* **Mini8085-4.9152MHz.pld** - SPLD source code for a system with CPU running on 4.9152 MHz clock frequency
-* **Mini8085-3.072MHz.jed** - SPLD fuse map for a system with CPU running on 3.072 MHz or 6.144 MHz* clock frequency
-* **Mini8085-3.9936MHz.jed** - SPLD fuse map for a system with CPU running on 3.9936 MHz (4 MHz) or 8 MHz clock frequency
-* **Mini8085-4.9152MHz.jed** - SPLD fuse map for a system with CPU running on 3.072 MHz clock frequency
+* [Mini8085-3.9936MHz.pld](SPLD/Mini8085-3.9936MHz.pld) - SPLD source code for a system with CPU running on 3.9936 MHz (4 MHz) or 8 MHz clock frequency
+  * [Mini8085-3.9936MHz.jed](SPLD/Mini8085-3.9936MHz.jed) - SPLD fuse map for a system with CPU running on 3.9936 MHz (4 MHz) or 8 MHz clock frequency
+* [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) - SPLD source code for a system with CPU running on 4.9152 MHz clock frequency
+  * [Mini8085-4.9152MHz.jed](SPLD/Mini8085-4.9152MHz.jed) - SPLD fuse map for a system with CPU running on 3.072 MHz clock frequency
 
 The SPLD IC has to be programmed using an EPROM programmer, such as a popular MiniPro TL866CS programmer. The process is very similar to programming regular EPROM ICs:
 * Select IC manufacturer: Lattice for GAL16V8 or Atmel for ATF16V8)
 * Select the SPLD type: GAL16V8 or ATF16V8
-* Load the SPLD fuse map - pick one of **Mini8085-3.072MHz.jed**, **Mini8085-3.9936MHz.jed**, or **Mini8085-4.9152MHz.jed** files, depending on the CPU frequency (or the crystal resonator you are using).
+* Load the SPLD fuse map - pick one of [Mini8085-3.072MHz.jed](SPLD/Mini8085-3.072MHz.jed), [Mini8085-3.9936MHz.jed](SPLD/Mini8085-3.9936MHz.jed), or [Mini8085-4.9152MHz.jed](SPLD/Mini8085-4.9152MHz.jed) files, depending on the CPU frequency (or the crystal resonator you are using).
 * Program the SPLD. You might want to disable "lock" option, so that SPLD will remain readable after the programming.
 
 #### SPLD Implementation
-The **Mini8085-3.072MHz.pld** and **Mini8085-4.9152MHz.pld** files contain the SPLD source code, that describes the logic equations defining the desired SPLD functionality. The source code can be divided into the following sections:
+The [Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld), [Mini8085-3.9936MHz.pld](SPLD/Mini8085-3.9936MHz.pld), and [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) files contain the SPLD source code, that describes the logic equations defining the desired SPLD functionality. The source code can be divided into the following sections:
 
 ##### Header
 This part contains the name of the SPLD and the project name:
@@ -161,9 +161,9 @@ Clock IOM    A15    SWAPMEM A7    A6    A5    A4    A3   GND
 </code></pre>
 
 ##### Logic Equations - USART Clock Frequency Divider
-The frequency divider is implemented as a synchronous counter, where all the outputs change their state simultaneously with the rising edge of the Clock signal. To achieve this, the SPLD is configured in *registered* mode (this is done automatically, by the SPLD assembler). In this mode the SPLD outputs with .R suffix (Q0.R - Q4.R) are configured as D flip-flops, and their logic equations describe the next state of the flip-flops (the values on their D inputs, that will be latched with the Clock signal). For example, in the **Mini8085-4.9152MHz.pld** the next state of Q0 output is defined to be the inverse of its current state: Q0.R = /Q0. The Q0 - Q2 outputs are the outputs of intermediate stages of counter/divider, and they are not used in the MiniMax8085. The USART clock inputs are connected to either Q3 or Q4 output, depending on the position of the jumper JP3, resulting in either divide by 10 or 20 for 3.072 MHz CPU clock (using the **Mini8085-3.072MHz.pld** fuse map) or in divide by either 16 or 32 for 4.9152 MHz CPU clock (using the **Mini8085-4.9152MHz.pld** fuse map).
+The frequency divider is implemented as a synchronous counter, where all the outputs change their state simultaneously with the rising edge of the Clock signal. To achieve this, the SPLD is configured in *registered* mode (this is done automatically, by the SPLD assembler). In this mode the SPLD outputs with .R suffix (Q0.R - Q4.R) are configured as D flip-flops, and their logic equations describe the next state of the flip-flops (the values on their D inputs, that will be latched with the Clock signal). For example, in [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) the next state of Q0 output is defined to be the inverse of its current state: Q0.R = /Q0. The Q0 - Q2 outputs are the outputs of intermediate stages of counter/divider, and they are not used in the MiniMax8085. The USART clock inputs are connected to either Q3 or Q4 output, depending on the position of the jumper JP3, resulting in either divide by 10 or 20 for 3.072 MHz CPU clock (using the [Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld) fuse map) or in divide by either 16 or 32 for 4.9152 MHz CPU clock (using the [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) fuse map).
 
-**Mini8085-4.9152MHz.pld**: 5-bit binary counter, or divide by 32 frequency divider.
+[Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld): 5-bit binary counter, or divide by 32 frequency divider.
 <pre><code>
 Q0.R =   /Q0
  
@@ -186,7 +186,7 @@ Q4.R =    Q4 * /Q3
        + /Q4 *  Q3 *  Q2 *  Q1 *  Q0
 </code></pre>
 
-**Mini8085-3.072MHz.pld**: Q2-Q0 implement divide by 5 frequency divider, Q3 and Q4 stages divide the frequency further by 2 and 4 respectively.
+[Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld): Q2-Q0 implement divide by 5 frequency divider, Q3 and Q4 stages divide the frequency further by 2 and 4 respectively.
 <pre><code>
 Q0.R =   /Q2 * /Q0
 
