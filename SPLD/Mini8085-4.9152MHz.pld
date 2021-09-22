@@ -1,0 +1,61 @@
+GAL16V8       ; 8085 SBC Logic first line : used GAL
+8085Mini      ;                second line: any text (max. 8 char.)
+
+
+Clock IOM    A15    SWAPMEM A7    A6    A5    A4    A3   GND
+/OE   RAMCS  ROMCS  USARTCS Q4    Q3    Q2    Q1    Q0   VCC
+
+
+Q0.R =   /Q0
+ 
+Q1.R =    Q1 * /Q0
+       + /Q1 *  Q0
+
+Q2.R =    Q2 * /Q1
+       +  Q2 * /Q0
+       + /Q2 *  Q1 *  Q0
+
+Q3.R =    Q3 * /Q2
+       +  Q3 * /Q1
+       +  Q3 * /Q0
+       + /Q3 *  Q2 *  Q1 *  Q0
+
+Q4.R =    Q4 * /Q3
+       +  Q4 * /Q2
+       +  Q4 * /Q1
+       +  Q4 * /Q0
+       + /Q4 *  Q3 *  Q2 *  Q1 *  Q0
+
+/ROMCS =   /IOM *  SWAPMEM * /A15
+         + /IOM * /SWAPMEM *  A15
+
+/RAMCS =   /IOM *  SWAPMEM *  A15
+         + /IOM * /SWAPMEM * /A15
+
+/USARTCS = IOM * /A7 * /A6 * /A5 * /A4 * A3
+
+DESCRIPTION
+
+This is a glue logic for a simple 8085 based SBC (4.9152 MHz CPU clock version)
+It implements three following functions:
+1. Frequency divider for 8051 UART that divides 4.9152 MHz input frequency
+   by 16 or 32 to obtain 307.2 kHz or 153.6 kHz UART clock respectively
+
+Outputs Q0-Q2 are not to be used (they are outputs of divide by 8 counter)
+Q3 is 307.2 kHz 50% duty cycle clock
+Q4 is 153.6 kHz 50% duty cycle clock
+
+
+2. Chip select for ROM and SRAM
+
+Both ROM and SRAM chip selects are only activated when IOM is LOW.
+The SWAPMEM signals allows change the mapping of ROM and SRAM to the address
+space. Normally (SWAPMEM = 0), ROM is mapped to the lower 32 KiB, and
+SRAM is mapped to the upper 32 KiB. Setting SWAPMEM to 1 maps ROM to upper
+32 KiB and SRAM to lower 32 KiB. This can be used to run CP/M that needs
+lower memory to be in RAM.
+
+3. Chip select for USART
+
+USARTCS is activated (logic LOW) when IOM is HIGH and the address is 00001xxx
+

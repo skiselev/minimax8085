@@ -1,0 +1,25 @@
+
+
+ Pin # | Name     | Pin Type
+-----------------------------
+   1   | Clock    | Clock
+   2   | IOM      | Input
+   3   | A15      | Input
+   4   | SWAPMEM  | Input
+   5   | A7       | Input
+   6   | A6       | Input
+   7   | A5       | Input
+   8   | A4       | Input
+   9   | A3       | Input
+  10   | GND      | GND
+  11   | /OE      | /OE
+  12   | RAMCS    | Output
+  13   | ROMCS    | Output
+  14   | USARTCS  | Output
+  15   | Q4       | Output
+  16   | Q3       | Output
+  17   | Q2       | Output
+  18   | Q1       | Output
+  19   | Q0       | Output
+  20   | VCC      | VCC
+

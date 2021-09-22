@@ -1,0 +1,82 @@
+
+
+Pin 19 = Q0           XOR = 1   AC1 = 0
+  0  ---x ---- ---- ---- ---- ---- ---- ---- xxxx xxxx xxxx
+  1  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+  2  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+  3  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+  4  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+  5  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx ---x --x-
+  6  ---- ---- ---- ---- ---- ---- --x- ---x ---- ---- ----
+  7  ---- ---- ---- xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+
+Pin 18 = Q1           XOR = 1   AC1 = 0
+  8  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+  9  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 10  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 11  xxxx xxxx xxxx xxxx xxxx xxxx xxxx ---- ---x --x- ----
+ 12  ---- ---- ---- ---- ---x ---- --x- ---- ---- ---- ----
+ 13  ---- --x- --x- ---x ---- ---- ---- ---- ---- xxxx xxxx
+ 14  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 15  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+
+Pin 17 = Q2           XOR = 1   AC1 = 0
+ 16  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 17  xxxx xxxx xxxx xxxx xxxx ---- ---- ---x --x- ---- ----
+ 18  ---- ---- ---- ---x ---- --x- ---- ---- ---- ---- ---x
+ 19  ---- ---- --x- ---- ---- ---- ---- --x- --x- --x- ---x
+ 20  ---- ---- ---- ---- xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 21  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 22  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 23  xxxx xxxx xxxx ---- ---- ---- ---x --x- ---- ---- ----
+
+Pin 16 = Q3           XOR = 1   AC1 = 0
+ 24  ---- ---- ---x ---- --x- ---- ---- ---- ---- ---x ----
+ 25  ---- --x- ---- ---- ---- ---x ---- ---- ---- --x- ----
+ 26  ---- ---- --x- --x- --x- --x- ---x ---- ---- ---- xxxx
+ 27  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 28  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 29  xxxx ---- ---- ---- ---- ---- ---- ---- ---- x--- ----
+ 30  ---- -x-- -x-- -x-- -x-- x--- xxxx xxxx xxxx xxxx xxxx
+ 31  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+
+Pin 15 = Q4           XOR = 1   AC1 = 0
+ 32  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 33  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 34  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx ----
+ 35  ---- ---- ---- ---- ---- ---- ---- -x-- -x-- x--- ----
+ 36  ---- ---- ---- ---- -x-- x--- -x-- ---- ---- ---- ----
+ 37  ---- xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 38  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 39  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+
+Pin 14 = USARTCS      XOR = 0   AC1 = 1
+ 40  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx ---- ---- ----
+ 41  ---- ---- ---- ---- ---- -x-- x--- x--- ---- ---- ----
+ 42  ---- ---- -x-- -x-- -x-- ---- ---- ---- ---- ---- xxxx
+ 43  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 44  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 45  xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+ 46  xxxx xxxx xxxx xxxx xxxx xxxx ---- ---- ---- ---- ----
+ 47  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+Pin 13 = ROMCS        XOR = 0   AC1 = 1
+ 48  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 49  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 50  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 51  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 52  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 53  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 54  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 55  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+Pin 12 = RAMCS        XOR = 0   AC1 = 1
+ 56  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 57  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 58  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 59  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 60  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 61  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 62  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+ 63  ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
