@@ -10,6 +10,8 @@ I wanted the project to be simple to build, with a minimal number of components,
 
 The resulting design includes 8085 CPU, 8251 USART, 32 KiB SRAM, 32 KiB or 16 KiB ROM. It uses a GAL16V8/ATF16V8 simple programmable logic device (SPLD) instead of discrete logic ICs for the address decode and the frequency divider for USART. It reduces the number of components, allows for tweaking the configuration by re-programming the SPLD, and provides an introduction to the programmable logic devices.
 
+![MiniMax8085 Assembled Board](images/Assembled_Board.jpg)
+
 ## Specifications
 * 80C85A or 8085A CPU, 3.072 MHz or 4.9152 MHz CPU clock frequency
 * 82C51A or 8251A USART for console connection
@@ -57,10 +59,8 @@ JP3 sets the USART input clock frequency
 
 Jumper Position | Description
 --------------- | -----------
-1-2 | 307.2 kHz - 19200 bps (default) or 2400 bps, depending on USART configuration
- 614.4 kHz - (For 6.144 MHz and 8 MHz CPUs) 38400 bps (default) or 4800 bps, depending on USART configuration
-2-3 | 153.6 kHz - 9600 bps (default) or 1200 bps, depending on USART configuration
- 307.2 kHz - (For 6.144 MHz and 8 MHz CPUs) 19200 bps (default) or 2400 bps, depending on USART configuration
+1-2 | 307.2 kHz - 19200 bps (default) or 2400 bps, depending on USART configuration; 614.4 kHz - (For 6.144 MHz and 8 MHz CPUs) 38400 bps (default) or 4800 bps, depending on USART configuration
+2-3 | 153.6 kHz - 9600 bps (default) or 1200 bps, depending on USART configuration; 307.2 kHz - (For 6.144 MHz and 8 MHz CPUs) 19200 bps (default) or 2400 bps, depending on USART configuration
 
 #### Connector P1 - POWER
 
@@ -299,6 +299,8 @@ IC Socket      | U8        | 8 pin 300 mil DIP socket                  | 1      
 ### Monitor
 
 MiniMax8085 uses MON85 Software Debug Monitor For the 8085/8080 written by Dave Dunfield. Specifically it was tested with the improved by Roman Borik [version 1.2](http://blog.borik.net/2012/01/upraveny-monitor-pre-ncb85.html). This version adds support for undocumented 8085 instructions and flags.
+
+![MON85 Screenshot](images/MON85.png)
 
 ### Tiny BASIC
 The famous [Tiny BASIC](https://en.wikipedia.org/wiki/Tiny_BASIC) 2.0 written by Li-Chen Wang and modified by Roger Rauskolb, runs on MiniMax8085 with very little modifications: The 8251 USART I/O address needs to be updated, and its initialization parameters need to be slightly updated - to use 1 stop bit instead of two, and to enable CTS/RTS flow control. Also the RAM addresses need to be updated to start from 8000h.
