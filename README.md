@@ -22,6 +22,7 @@ The resulting design includes 8085 CPU, 8251 USART, 32 KiB SRAM, 32 KiB or 16 Ki
 ### Schematic and PCB Layout
 
 [Schematic - Version 1.0](KiCad/Mini8085-Schematic-1.0.pdf)
+
 [PCB Layout - Version 1.0](KiCad/Mini8085-Board-1.0.pdf)
 
 ### Design Description
@@ -34,7 +35,7 @@ The GAL16V8 simple programmable logic device (U5) implements all the required "g
 * Clock divider that divides the CPU clock to obtain USART transmit and receive clock. The divisor value depends on the CPU speed. Fuse maps with divide by 10 and 20, divide by 13 and 26, and divide by 16 and 32 ratios are provided to support common 8085A CPU clocks: 3.072 MHz, 4 MHz, 4.9152 MHz, 6.144 MHz, and 8 MHz.
 * Address decode and chip select for the ROM and SRAM. The address decode logic include additional /SWAP_MEM input, which by default is configured to swap address mapping of ROM and RAM.
 
-Please refer to the [Simple Programmable Logic Device] section below for more details regarding the SPLD configuration and programming.
+Please refer to the [Simple Programmable Logic Device](#simple-programmable-logic-device) section below for more details regarding the SPLD configuration and programming.
 
 The MiniMax8085 includes a 40-pin extension connector (P4), that features the 8085A address and data buses, and control signals. Please refer to the Jumpers and Connectors section below for the connector pinout and signals description.
 
@@ -100,6 +101,7 @@ Pin Number | Signal Name       | Description and Notes
 P4 exposes the 8085A CPU address and data buses, and control signals.
 
 Pin | Signal | Description | Pin | Signal | Description | Pin | Signal | Description
+--- | ------ | ----------- | --- | ------ | ----------- | --- | ------ | -----------
 1 | TRAP | Non-maskable interrupt input | 14 | A12 | Address bus - bit 12 output | 27 | /WR | Write control output
 2 | 3.073 MHz | CPU clock output | 15 | A15 | Address bus - bit 15 output | 28 | RESET | Reset output
 3 | RST5_5 | RST5.5 interrupt input | 16 | A14 | Address bus - bit 14 output | 29 | A1 | Address bus - bit 1 output
@@ -138,7 +140,7 @@ As described above, the MiniMax8085 SBC uses a GAL16V8 simple programmable logic
 The SPLD IC has to be programmed using an EPROM programmer, such as a popular MiniPro TL866CS programmer. The process is very similar to programming regular EPROM ICs:
 * Select IC manufacturer: Lattice for GAL16V8 or Atmel for ATF16V8)
 * Select the SPLD type: GAL16V8 or ATF16V8
-* Load the SPLD fuse map - pick one of **Mini8085-3.072MHz.jed**, **Mini8085-3.9936MHz.jed**, or **Mini8085-4.9152MHz.jed** file, depending on the CPU frequency (or the crystal resonator you are using).
+* Load the SPLD fuse map - pick one of **Mini8085-3.072MHz.jed**, **Mini8085-3.9936MHz.jed**, or **Mini8085-4.9152MHz.jed** files, depending on the CPU frequency (or the crystal resonator you are using).
 * Program the SPLD. You might want to disable "lock" option, so that SPLD will remain readable after the programming.
 
 #### SPLD Implementation
@@ -222,7 +224,9 @@ This equation activates the /USARTCS signal. It is active (LOW) when 8085 IO/M s
 </code></pre>
 
 ### Bill of Materials
+
 [Link to the project on Mouser.com](http://www.mouser.com/ProjectManager/ProjectDetail.aspx?AccessID=e60fdda470) - View and order all components except of the 8085A CPU, the 8251A USART, and the PCB.
+
 [Link to the project on OSHPark.com](https://www.oshpark.com/shared_projects/CyQsELdX) - View and order the MiniMax8085 PCB.
 
 Component Type | Reference | Description                               | Quantity | Possible Sources and Notes
@@ -429,7 +433,7 @@ USART_OUT:     IN      USART_CMD
   * [8085 Microprocessor Projects](http://www.glitchwrks.com/8085projects.html)
   * [Glitch Works 8085 SBC GitHub Repository](https://github.com/glitchwrks/8085_sbc)
 * Coffee, bits and bikes
-  * [Mini85v2}(http://bitsnbikes.blogspot.sk/2012/02/mini85.html)
+  * [Mini85v2](http://bitsnbikes.blogspot.sk/2012/02/mini85.html)
 * Ken Shirriff's Blog - 8085 Reverse Engineering:
   * [Inside the ALU of the 8085 microprocessor](http://www.righto.com/2013/01/inside-alu-of-8085-microprocessor.html)
   * [Notes on the PLA on the 8085 chip](http://www.righto.com/2013/01/notes-on-pla-on-8085-chip.html)
