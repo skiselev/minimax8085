@@ -4,9 +4,9 @@ Minimal 8085 Single Board Computer
 ## Introduction
 The MiniMax8085 project has been brewing for almost three years. In the spring of 2014 my kids and I visited a local [surplus store](http://www.surplusgizmos.com/), where my kids found some Intel 8000 series parts in the kids-fill-your-bucket area. Among these ICs were there: an 8085 CPU, an 8155 RAM with I/O ports and timer, a couple of 8255 PPIs, an 8282 latch, and some 27C128 UV EPROMs. It looked like a good start for an 8085 based computer that can be used to teach my kids some computer design and programming basics.
 I wanted the project to be simple to build, with a minimal number of components, but yet to be a fully functional single board computer (e.g. to include the memory and an input/output device, for example a UART) with an extension bus. I checked the Internet for existing homebrew 8085 computers and found Roman Fülek's [NCB85](http://archeocomp.blogspot.com/2013/01/ncb85.html) and [NCB85v2](http://archeocomp.blogspot.com/2014/01/ncb85-7-nove-ncb85v2.html) projects, and Glitch Works [8085 projects](http://www.glitchwrks.com/8085projects.html). While I liked these projects, they didn't quite meet my project design goals:
-* NCB85 was the closest, but it doesn't have an extension bus
-* NCB85v2 is a little bit too complicated for my needs
-* Glitch Works 8085 project didn't have an on-board UART
+* [NCB85](http://archeocomp.blogspot.com/2013/01/ncb85.html) was the closest, but it doesn't have an extension bus
+* [NCB85v2](http://archeocomp.blogspot.com/2014/01/ncb85-7-nove-ncb85v2.html) is a little bit too complicated for my needs
+* [Glitch Works 8085](http://www.glitchwrks.com/8085projects.html) project didn't have an on-board UART
 
 The resulting design includes 8085 CPU, 8251 USART, 32 KiB SRAM, 32 KiB or 16 KiB ROM. It uses a GAL16V8/ATF16V8 simple programmable logic device (SPLD) instead of discrete logic ICs for the address decode and the frequency divider for USART. It reduces the number of components, allows for tweaking the configuration by re-programming the SPLD, and provides an introduction to the programmable logic devices.
 
@@ -46,38 +46,40 @@ The MiniMax8085 includes a 40-pin extension connector (P4), that features the 80
 #### Jumpers JP1 and JP2 - ROM Configuration
 
 These jumpers configure how pins 1 and 27 of the ROM IC (U3) are connected. The jumper settings are printed on the bottom side of the PCB.
-ROM Type | Jumper JP1 Position - ROM Pin 1 Connection | JP2 Position - ROM Pin 27 Connection
--------- | ------------------------------------------ | ------------------------------------
-27C128, 27C64, 27128, 2764 |  2-3 - pin 1 connected to VCC | 1-2 - pin 27 connected to VCC
-27C256 |2-3 - pin 1 connected to VCC | 2-JP1 pin 1 (jumper installed vertically), pin 27 connected to A14
-28C256 | 1-2 - pin 1 connected to A14 | 2-3 - pin 27 connected to /WR
-29C256 | 2-JP2 pin 3 (jumper installed vertically), pin 1 connected to /WR | 2-JP1 pin 1 (jumper installed vertically), pin 27 connected to A14
+ROM Type                   | Jumper JP1 Position - ROM Pin 1 Connection                        | JP2 Position - ROM Pin 27 Connection
+-------------------------- | ----------------------------------------------------------------- | ------------------------------------
+27C128, 27C64, 27128, 2764 | 2-3 - pin 1 connected to VCC                                      | 1-2 - pin 27 connected to VCC
+27C256                     | 2-3 - pin 1 connected to VCC                                      | 2-JP1 pin 1 (jumper installed vertically), pin 27 connected to A14
+28C256                     | 1-2 - pin 1 connected to A14                                      | 2-3 - pin 27 connected to /WR
+29C256                     | 2-JP2 pin 3 (jumper installed vertically), pin 1 connected to /WR | 2-JP1 pin 1 (jumper installed vertically), pin 27 connected to A14
 
 #### Jumper JP3 - USART Clock Frequency
 
 JP3 sets the USART input clock frequency
 
-Jumper Position | Description
---------------- | -----------
-1-2 | 307.2 kHz - 19200 bps (default) or 2400 bps, depending on USART configuration; 614.4 kHz - (For 6.144 MHz and 8 MHz CPUs) 38400 bps (default) or 4800 bps, depending on USART configuration
-2-3 | 153.6 kHz - 9600 bps (default) or 1200 bps, depending on USART configuration; 307.2 kHz - (For 6.144 MHz and 8 MHz CPUs) 19200 bps (default) or 2400 bps, depending on USART configuration
+Jumper Position | Crystal Y1 Frequency (CPU Frequency)                          | USART Clock Frequency | USART Bit rate
+--------------- | ------------------------------------------------------------- | --------------------- | --------------
+1-2             | 6.144 MHz (3.073 MHz), 8 MHz (4 MHz), 9.8304 MHz (4.9152 MHz) | 307.2 kHz             | 19200 bps (default) or 2400 bps, depending on USART configuration
+1-2             | 12.288 MHz (6.144 MHz), 16 Mhz (8 MHz)                        | 614.4 kHz             | 38400 bps (default) or 4800 bps, depending on USART configuration
+2-3             | 6.144 MHz (3.073 MHz), 8 MHz (4 MHz), 9.8304 MHz (4.9152 MHz) | 153.6 kHz             | 9600 bps (default) or 1200 bps, depending on USART configuration
+2-3             | 12.288 MHz (6.144 MHz), 16 MHz (8 MHz)                        | 307.2 kHz             | 19200 bps (default) or 2400 bps, depending on USART configuration
 
 #### Connector P1 - POWER
 
 Connect regulated +5V power supply to this connector.
-Pin | Description
---- | -----------
+Pin                     | Description
+----------------------- | -----------
 tip (the inner contact) | Positive terminal - +5V
-barrel / sleeve | Negative terminal - ground
+barrel / sleeve         | Negative terminal - ground
 
 #### Connector P2 - SIO
 
-P2 exposes the 8085A CPU serial input and output lines.
+Connector P2 contains the 8085A CPU serial input and output lines.
 Pin | Description
 --- | -----------
-1 | Ground
-2 | SOD / Serial Output Data
-3 | SID / Serial Input Data
+1   | Ground
+2   | SOD / Serial Output Data
+3   | SID / Serial Input Data
 
 #### Connector P3 - SERIAL
 
@@ -98,23 +100,30 @@ Pin Number | Signal Name       | Description and Notes
 
 #### Connector P4 - EXTENSION
 
-P4 exposes the 8085A CPU address and data buses, and control signals.
+Connector P4 contains the 8085A CPU address and data buses, and control signals.
 
-Pin | Signal | Description | Pin | Signal | Description | Pin | Signal | Description
---- | ------ | ----------- | --- | ------ | ----------- | --- | ------ | -----------
-1 | TRAP | Non-maskable interrupt input | 14 | A12 | Address bus - bit 12 output | 27 | /WR | Write control output
-2 | 3.073 MHz | CPU clock output | 15 | A15 | Address bus - bit 15 output | 28 | RESET | Reset output
-3 | RST5_5 | RST5.5 interrupt input | 16 | A14 | Address bus - bit 14 output | 29 | A1 | Address bus - bit 1 output
-4 | INTR | Interrupt request input | 17 | AD1 | Address/data bus - bit 1 bi-directional | 30 | A0 | Address bus - bit 0 output
-5 | RST7_5 | RST7.5 interrupt input | 18 | AD0 | Address/data bus - bit 0 bi-directional | 31 | A3 | Address bus - bit 3 output
-6 | /INTA | Interrupt acknowledge output | 19 | AD3 | Address/data bus - bit 3 bi-directional | 32 | A2 | Address bus - bit 2 output
-7 | ALE	| Address latch enable output | 20 | AD2 | Address/data bus - bit 2 bi-directional | 33 | A5 | Address bus - bit 5 output
-8 | /SWAP_MEM | Swap ROM & RAM addresses input | 21 | AD5 | Address/data bus - bit 5 bi-directional | 34 | A4 | Address bus - bit 4 output
-9 | A9 | Address bus - bit 9 output | 22 | AD4 | Address/data bus - bit 4 bi-directional | 35 | A7 | Address bus - bit 7 output
-10 | A8 | Address bus - bit 8 output | 23 | AD7 | Address/data bus - bit 7 bi-directional | 36 | A6 | Address bus - bit 6 output
-11 | A11 | Address bus - bit 11 output | 24 | AD6 | Address/data bus - bit 6 bi-directional | 37, 38 | VCC | Power - 5V
-12 | A10 | Address bus - bit 10 output | 25 | /RD | Read control output | 39, 40 | GND | Power - Ground
-13 | A13 | Address bus - bit 13 output | 26 | IO/M | I/O / memory cycle status output | | | 	 	 
+Pin | Signal    | Description                             | Pin | Signal | Description
+--- | --------- | --------------------------------------- | --- | ------ | -----------
+1   | TRAP      | Non-maskable interrupt input            | 21  | AD5    | Address/data bus - bit 5 bi-directional
+2   | 3.073 MHz | CPU clock output                        | 22  | AD4    | Address/data bus - bit 4 bi-directional
+3   | RST5_5    | RST5.5 interrupt input                  | 23  | AD7    | Address/data bus - bit 7 bi-directional
+4   | INTR      | Interrupt request input                 | 24  | AD6    | Address/data bus - bit 6 bi-directional
+5   | RST7_5    | RST7.5 interrupt input                  | 25  | /RD    | Read control output
+6   | /INTA     | Interrupt acknowledge output            | 26  | IO/M   | I/O / memory cycle status output
+7   | ALE	      | Address latch enable output             | 27  | /WR    | Write control output
+8   | /SWAP_MEM | Swap ROM & RAM addresses input          | 28  | RESET  | Reset output
+9   | A9        | Address bus - bit 9 output              | 29  | A1     | Address bus - bit 1 output
+10  | A8        | Address bus - bit 8 output              | 30  | A0     | Address bus - bit 0 output
+11  | A11       | Address bus - bit 11 output             | 31  | A3     | Address bus - bit 3 output
+12  | A10       | Address bus - bit 10 output             | 32  | A2     | Address bus - bit 2 output
+13  | A13       | Address bus - bit 13 output             | 33  | A5     | Address bus - bit 5 output
+14  | A12       | Address bus - bit 12 output             | 34  | A4     | Address bus - bit 4 output
+15  | A15       | Address bus - bit 15 output             | 35  | A7     | Address bus - bit 7 output
+16  | A14       | Address bus - bit 14 output             | 36  | A6     | Address bus - bit 6 output
+17  | AD1       | Address/data bus - bit 1 bi-directional | 37  | VCC    | Power - 5V
+18  | AD0       | Address/data bus - bit 0 bi-directional | 38  | VCC    | Power - 5V
+19  | AD3       | Address/data bus - bit 3 bi-directional | 39  | GND    | Power - Ground
+20  | AD2       | Address/data bus - bit 2 bi-directional | 40  | GND    | Power - Ground
 
 #### Connector P5 - VBAT
 
