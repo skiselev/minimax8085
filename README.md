@@ -13,7 +13,7 @@ The resulting design includes 8085 CPU, 8251 USART, 32 KiB SRAM, 32 KiB or 16 Ki
 ![MiniMax8085 Assembled Board](images/Assembled_Board.jpg)
 
 ## Specifications
-* 80C85A or 8085A CPU, 3.072 MHz or 4.9152 MHz CPU clock frequency
+* 80C85A or 8085A CPU, 3.072 MHz, 4 MHz, 4.9152 MHz, 6.144 MHz, or 8 MHz CPU clock frequency
 * 82C51A or 8251A USART for console connection
 * 32 KiB of battery backed SRAM
 * Up to 32 KiB of ROM. EEPROM, UV EPROM or Flash ROM memory is supported
@@ -140,9 +140,10 @@ Pin | Description
 As described above, the MiniMax8085 SBC uses a GAL16V8 simple programmable logic device (SPLD) to implement all the necessary glue logic. The SLPD sources and images (fuse maps are available [SPLD] folder of this GitHub repository:
 * [Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld) - SPLD source code for a system with CPU running on 3.072 MHz or 6.144 MHz clock frequency. 
   * [Mini8085-3.072MHz.jed](SPLD/Mini8085-3.072MHz.jed) - SPLD fuse map for a system with CPU running on 3.072 MHz or 6.144 MHz clock frequency
-  * When used with 6.144 MHz or 8 MHz CPU clock frequency, the USART clock will be doubled. So that it will work on 19200 bps instead of 9600 bps, or 38400 bps instead of 19200 bps.
+  * When used with 6.144 MHz CPU clock frequency, the USART clock will be doubled. So that it will work on 19200 bps instead of 9600 bps, or 38400 bps instead of 19200 bps, depending on [JP3 setting](#jumper-jp3---usart-clock-frequency)
 * [Mini8085-3.9936MHz.pld](SPLD/Mini8085-3.9936MHz.pld) - SPLD source code for a system with CPU running on 3.9936 MHz (4 MHz) or 8 MHz clock frequency
   * [Mini8085-3.9936MHz.jed](SPLD/Mini8085-3.9936MHz.jed) - SPLD fuse map for a system with CPU running on 3.9936 MHz (4 MHz) or 8 MHz clock frequency
+  * When used with 8 MHz CPU clock frequency, the USART clock will be doubled. So that it will work on 19200 bps instead of 9600 bps, or 38400 bps instead of 19200 bps, depending on [JP3 setting](#jumper-jp3---usart-clock-frequency)
 * [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) - SPLD source code for a system with CPU running on 4.9152 MHz clock frequency
   * [Mini8085-4.9152MHz.jed](SPLD/Mini8085-4.9152MHz.jed) - SPLD fuse map for a system with CPU running on 3.072 MHz clock frequency
 
@@ -170,7 +171,7 @@ Clock IOM    A15    SWAPMEM A7    A6    A5    A4    A3   GND
 </code></pre>
 
 ##### Logic Equations - USART Clock Frequency Divider
-The frequency divider is implemented as a synchronous counter, where all the outputs change their state simultaneously with the rising edge of the Clock signal. To achieve this, the SPLD is configured in *registered* mode (this is done automatically, by the SPLD assembler). In this mode the SPLD outputs with .R suffix (Q0.R - Q4.R) are configured as D flip-flops, and their logic equations describe the next state of the flip-flops (the values on their D inputs, that will be latched with the Clock signal). For example, in [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) the next state of Q0 output is defined to be the inverse of its current state: Q0.R = /Q0. The Q0 - Q2 outputs are the outputs of intermediate stages of counter/divider, and they are not used in the MiniMax8085. The USART clock inputs are connected to either Q3 or Q4 output, depending on the position of the jumper JP3, resulting in either divide by 10 or 20 for 3.072 MHz CPU clock (using the [Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld) fuse map) or in divide by either 16 or 32 for 4.9152 MHz CPU clock (using the [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) fuse map).
+The frequency divider is implemented as a synchronous counter, where all the outputs change their state simultaneously with the rising edge of the Clock signal. To achieve this, the SPLD is configured in *registered* mode (this is done automatically, by the SPLD assembler). In this mode the SPLD outputs with .R suffix (Q0.R - Q4.R) are configured as D flip-flops, and their logic equations describe the next state of the flip-flops (the values on their D inputs, that will be latched with the Clock signal). For example, in [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) the next state of Q0 output is defined to be the inverse of its current state: Q0.R = /Q0. The Q0 - Q2 outputs are the outputs of intermediate stages of counter/divider, and they are not used in the MiniMax8085. The USART clock inputs are connected to either Q3 or Q4 output, depending on the position of the jumper JP3, resulting in either divide by 10 or 20 for 3.072 MHz CPU clock (using the [Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld) fuse map), in divide by either 13 or 26 for 4.9152 MHz CPU clock (using the [Mini8085-3.9936MHz.pld](SPLD/Mini8085-3.9936MHz.pld) fuse map), or in divide by either 16 or 32 for 4.9152 MHz CPU clock (using the [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) fuse map).
 
 [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld): 5-bit binary counter, or divide by 32 frequency divider.
 <pre><code>
@@ -234,9 +235,9 @@ This equation activates the /USARTCS signal. It is active (LOW) when 8085 IO/M s
 
 ### Bill of Materials
 
-[Link to the project on Mouser.com](http://www.mouser.com/ProjectManager/ProjectDetail.aspx?AccessID=e60fdda470) - View and order all components except of the 8085A CPU, the 8251A USART, and the PCB.
+[MiniMax8085 project on Mouser.com](http://www.mouser.com/ProjectManager/ProjectDetail.aspx?AccessID=e60fdda470) - View and order all components except of the 8085A CPU, the 8251A USART, and the PCB.
 
-[Link to the project on OSHPark.com](https://www.oshpark.com/shared_projects/CyQsELdX) - View and order the MiniMax8085 PCB.
+[MiniMax8085 project on OSHPark.com](https://www.oshpark.com/shared_projects/CyQsELdX) - View and order the MiniMax8085 PCB.
 
 Component Type | Reference | Description                               | Quantity | Possible Sources and Notes
 -------------- | --------- | ----------------------------------------- | -------- | --------------------------
