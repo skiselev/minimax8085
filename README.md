@@ -145,10 +145,10 @@ As described above, the MiniMax8085 SBC uses a GAL16V8 simple programmable logic
   * [Mini8085-3.9936MHz.jed](SPLD/Mini8085-3.9936MHz.jed) - SPLD fuse map for a system with CPU running on 3.9936 MHz (4 MHz) or 8 MHz clock frequency
   * When used with 8 MHz CPU clock frequency, the USART clock will be doubled. So that it will work on 19200 bps instead of 9600 bps, or 38400 bps instead of 19200 bps, depending on [JP3 setting](#jumper-jp3---usart-clock-frequency)
 * [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) - SPLD source code for a system with CPU running on 4.9152 MHz clock frequency
-  * [Mini8085-4.9152MHz.jed](SPLD/Mini8085-4.9152MHz.jed) - SPLD fuse map for a system with CPU running on 3.072 MHz clock frequency
+  * [Mini8085-4.9152MHz.jed](SPLD/Mini8085-4.9152MHz.jed) - SPLD fuse map for a system with CPU running on 4.9152 MHz clock frequency
 
 The SPLD IC has to be programmed using an EPROM programmer, such as a popular MiniPro TL866CS programmer. The process is very similar to programming regular EPROM ICs:
-* Select IC manufacturer: Lattice for GAL16V8 or Atmel for ATF16V8)
+* Select IC manufacturer: Lattice for GAL16V8 or Atmel for ATF16V8
 * Select the SPLD type: GAL16V8 or ATF16V8
 * Load the SPLD fuse map - pick one of [Mini8085-3.072MHz.jed](SPLD/Mini8085-3.072MHz.jed), [Mini8085-3.9936MHz.jed](SPLD/Mini8085-3.9936MHz.jed), or [Mini8085-4.9152MHz.jed](SPLD/Mini8085-4.9152MHz.jed) files, depending on the CPU frequency (or the crystal resonator you are using).
 * Program the SPLD. You might want to disable "lock" option, so that SPLD will remain readable after the programming.
@@ -455,6 +455,6 @@ USART_OUT:     IN      USART_CMD
   * [Reverse-engineering the 8085's ALU and its hidden registers](http://www.righto.com/2013/07/reverse-engineering-8085s-alu-and-its.html)
   * [Reverse-engineering the flag circuits in the 8085 processor](http://www.righto.com/2013/07/reverse-engineering-flag-circuits-in.html)
   * [Reverse-engineering the 8085's decimal adjust circuitry](http://www.righto.com/2013/08/reverse-engineering-8085s-decimal.html)
-* 8080 Opcodes: http://pastraiser.com/cpu/i8080/i8080_opcodes.html
+* [8080 Opcodes](http://pastraiser.com/cpu/i8080/i8080_opcodes.html)
 * [The Macroassembler AS - a macroassembler that supports Intel 8085](http://john.ccac.rwth-aachen.de:8000/as/)
 * [GALasm 2.1 - Portable GAL Assembler](https://github.com/daveho/GALasm)
