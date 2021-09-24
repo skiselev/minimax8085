@@ -1,6 +1,22 @@
 # MiniMax8085
 Minimal 8085 Single Board Computer
 
+## Table of Content
+* [Introduction](#introduction)
+* [Specifications](#specifications)
+* [Hardware Documentation](#hardware-documentation)
+  * [Schematic and PCB Layout](#schematic-and-pcb-layout)
+  * [Design Description](#design-description)
+  * [Jumpers and Connectors](#jumpers-and-connectors)
+  * [Simple Programmable Logic Device](#simple-programmable-logic-device)
+  * [Bill of Materials](#bill-of-materials)
+* [Firmware and Software](#firmware-and-software)
+  * [Monitor](#monitor)
+  * [Tiny BASIC](#tiny-basic)
+  * [Test Programs](#test-programs)
+* [Frequently Asked Questions and Troubleshooting](#frequently-asked-questions-and-troubleshooting)
+* [References](#references)
+
 ## Introduction
 The MiniMax8085 project has been brewing for almost three years. In the spring of 2014 my kids and I visited a local [surplus store](http://www.surplusgizmos.com/), where my kids found some Intel 8000 series parts in the kids-fill-your-bucket area. Among these ICs were there: an 8085 CPU, an 8155 RAM with I/O ports and timer, a couple of 8255 PPIs, an 8282 latch, and some 27C128 UV EPROMs. It looked like a good start for an 8085 based computer that can be used to teach my kids some computer design and programming basics.
 I wanted the project to be simple to build, with a minimal number of components, but yet to be a fully functional single board computer (e.g. to include the memory and an input/output device, for example a UART) with an extension bus. I checked the Internet for existing homebrew 8085 computers and found Roman Fülek's [NCB85](http://archeocomp.blogspot.com/2013/01/ncb85.html) and [NCB85v2](http://archeocomp.blogspot.com/2014/01/ncb85-7-nove-ncb85v2.html) projects, and Glitch Works [8085 projects](http://www.glitchwrks.com/8085projects.html). While I liked these projects, they didn't quite meet my project design goals:
