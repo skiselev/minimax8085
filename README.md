@@ -11,9 +11,13 @@ Minimal 8085 Single Board Computer
   * [Simple Programmable Logic Device](#simple-programmable-logic-device)
   * [Bill of Materials](#bill-of-materials)
 * [Firmware and Software](#firmware-and-software)
-  * [Monitor](#monitor)
+  * [ROM Image](#rom-image)
+  * [MON85 Monitor](#mon85-monitor)
   * [Tiny BASIC](#tiny-basic)
+  * [IMSAI 8K BASIC](#imsai-8k-basic)
   * [Test Programs](#test-programs)
+  * [Building the Software](#building-the-software)
+* [3D Printable Enclosure](#3d-printable-enclosure)
 * [Frequently Asked Questions and Troubleshooting](#frequently-asked-questions-and-troubleshooting)
 * [References](#references)
 
@@ -153,7 +157,7 @@ Pin | Description
 
 #### SPLD Files and Programming
 
-As described above, the MiniMax8085 SBC uses a GAL16V8 simple programmable logic device (SPLD) to implement all the necessary glue logic. The SLPD sources and images (fuse maps are available [SPLD] folder of this GitHub repository:
+As described above, the MiniMax8085 SBC uses a GAL16V8 simple programmable logic device (SPLD) to implement all the necessary glue logic. The SLPD sources and images (fuse maps are available [SPLD](SPLD/) folder of this GitHub repository:
 * [Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld) - SPLD source code for a system with CPU running on 3.072 MHz or 6.144 MHz clock frequency. 
   * [Mini8085-3.072MHz.jed](SPLD/Mini8085-3.072MHz.jed) - SPLD fuse map for a system with CPU running on 3.072 MHz or 6.144 MHz clock frequency
   * When used with 6.144 MHz CPU clock frequency, the USART clock will be doubled. So that it will work on 19200 bps instead of 9600 bps, or 38400 bps instead of 19200 bps, depending on [JP3 setting](#jumper-jp3---usart-clock-frequency)
@@ -187,7 +191,7 @@ Clock IOM    A15    SWAPMEM A7    A6    A5    A4    A3   GND
 </code></pre>
 
 ##### Logic Equations - USART Clock Frequency Divider
-The frequency divider is implemented as a synchronous counter, where all the outputs change their state simultaneously with the rising edge of the Clock signal. To achieve this, the SPLD is configured in *registered* mode (this is done automatically, by the SPLD assembler). In this mode the SPLD outputs with .R suffix (Q0.R - Q4.R) are configured as D flip-flops, and their logic equations describe the next state of the flip-flops (the values on their D inputs, that will be latched with the Clock signal). For example, in [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) the next state of Q0 output is defined to be the inverse of its current state: Q0.R = /Q0. The Q0 - Q2 outputs are the outputs of intermediate stages of counter/divider, and they are not used in the MiniMax8085. The USART clock inputs are connected to either Q3 or Q4 output, depending on the position of the jumper JP3, resulting in either divide by 10 or 20 for 3.072 MHz CPU clock (using the [Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld) fuse map), in divide by either 13 or 26 for 4.9152 MHz CPU clock (using the [Mini8085-3.9936MHz.pld](SPLD/Mini8085-3.9936MHz.pld) fuse map), or in divide by either 16 or 32 for 4.9152 MHz CPU clock (using the [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) fuse map).
+The frequency divider is implemented as a synchronous counter, where all the outputs change their state simultaneously with the rising edge of the Clock signal. To achieve this, the SPLD is configured in *registered* mode (this is done automatically, by the SPLD assembler). In this mode the SPLD outputs with .R suffix (Q0.R - Q4.R) are configured as D flip-flops, and their logic equations describe the next state of the flip-flops (the values on their D inputs, that will be latched with the Clock signal). For example, in [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) the next state of Q0 output is defined to be the inverse of its current state: Q0.R = /Q0. The Q0 - Q2 outputs are the outputs of intermediate stages of counter/divider, and they are not used in the MiniMax8085. The USART clock inputs are connected to either Q3 or Q4 output, depending on the position of the jumper JP3, resulting in divide by either 10 or 20 for 3.072 MHz CPU clock (using the [Mini8085-3.072MHz.pld](SPLD/Mini8085-3.072MHz.pld) fuse map), divide by either 13 or 26 for 4.9152 MHz CPU clock (using the [Mini8085-3.9936MHz.pld](SPLD/Mini8085-3.9936MHz.pld) fuse map), or divide by either 16 or 32 for 4.9152 MHz CPU clock (using the [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld) fuse map).
 
 [Mini8085-4.9152MHz.pld](SPLD/Mini8085-4.9152MHz.pld): 5-bit binary counter, or divide by 32 frequency divider.
 <pre><code>
@@ -242,7 +246,7 @@ The /RAMCS is active (LOW) when 8085 IO/M is LOW, indicating a memory access, an
          + /IOM * /SWAPMEM * /A15
 </code></pre>
 
-##### Logic Equations - USART Chip Select
+#### Logic Equations - USART Chip Select
 This equation activates the /USARTCS signal. It is active (LOW) when 8085 IO/M signal is HIGH, indicating an I/O port access, address lines A7-A4 are LOW, and address line A3 is high. So that USART is selected using  00001xxxb addresses (8h-0Fh).
 
 <pre><code>
@@ -322,19 +326,61 @@ IC Socket      | U8        | 8 pin 300 mil DIP socket                  | 1      
 
 ## Firmware and Software
 
-### Monitor
+### ROM Image
+
+The pre-built [ROM image](software/mon85-tinybasic-8kbasic.bin) for MiniMax8085 containing, the MON85 monitor, Tiny BASIC, and IMSAI 8K BASIC is provided in this repository.
+This ROM image has the following layout:
+* 0x0000 - 0x0FFF - MON85 Monitor. It will run automatically upon power-on or reset
+* 0x1000 - 0x17FF - Tiny BASIC. Use MON85 **G 1000** command to run it
+* 0x1800 - 0x3FFF - IMSAI 8K BASIC. Use MON85 **G 1800** command to run it
+The image size is 8 KiB, and it will work with either 16 KiB EPROMs (e.g. 27128), and 32 KiB EPROMs. It can be programmed into 8 KiB EPROM, leaving out the IMSAI 8K BASIC.
+
+### MON85 Monitor
 
 MiniMax8085 uses MON85 Software Debug Monitor For the 8085/8080 written by Dave Dunfield. Specifically it was tested with the improved by Roman Borik [version 1.2](http://blog.borik.net/2012/01/upraveny-monitor-pre-ncb85.html). This version adds support for undocumented 8085 instructions and flags.
+
+#### Usage Notes
+* Use *?* command to get a short summary of the MON85 commands
+* Press *ESC* button to interrupt currently running command and return to the command prompt
+* Addresses and data are typed in hexadecimal, without any preferences. For example *M 18F0*
+
+#### Files
+
+* [MON85 source code modified for MiniMax8085](software/mon85/mon85-mini85.asm)
+* [MON85 V1.2 source](software/mon85/mon85-v12-ncb85.asm)
+* [MON85 Documentation](software/mon85/mon85.txt)
 
 ![MON85 Screenshot](images/MON85.png)
 
 ### Tiny BASIC
-The famous [Tiny BASIC](https://en.wikipedia.org/wiki/Tiny_BASIC) 2.0 written by Li-Chen Wang and modified by Roger Rauskolb, runs on MiniMax8085 with very little modifications: The 8251 USART I/O address needs to be updated, and its initialization parameters need to be slightly updated - to use 1 stop bit instead of two, and to enable CTS/RTS flow control. Also the RAM addresses need to be updated to start from 8000h.
-For your enjoyment the original Tiny BASIC article from the December 1976 issue of Interface Age magazine - TinyBASIC-2.0.pdf, the source files and the ROM image - tinybasic-2.0-mini85.zip, are provided at the bottom of this page.
+
+The famous [Tiny BASIC](https://en.wikipedia.org/wiki/Tiny_BASIC) 2.0 written by Li-Chen Wang and modified by Roger Rauskolb, runs on MiniMax8085 with very little modifications: The 8251 USART I/O address needs to be updated, and its initialization parameters need to be slightly updated to use 1 stop bit instead of two, and to enable CTS/RTS flow control. Also the RAM addresses need to be updated to start from 8000h.
+
+#### Files
+
+* [Tiny BASIC source code modified for MiniMax8085](software/tinybasic/tinybasic-2.0-mini85.asm)
+* [Tiny BASIC source code modified for AS Macro Assembler](software/tinybasic/tinybasic-2.0.asm)
+* [Tiny BASIC article - Interface Age Magazine, December 1976](software/tinybasic/TinyBASIC-2.0.pdf)
+
+### IMSAI 8K BASIC
+
+IMSAI 8K BASIC runs on MiniMax8085 with minimal modifications (memory and USART I/O addresses), and provides floating point support. With that being said, it is slower that Tiny BASIC.
+
+#### Usage Notes
+* The operators and commands must be typed in upper case
+* After power-on, make sure to type *NEW* command before typing any other commands
+* The BASIC program in memory is preserved across reboots
+
+#### Files
+
+* [IMSAI 8K BASIC source code modified for MiniMax8085](software/8kbasic/8kbasic-mini85.asm)
+* [IMSAI 8K BASIC source code modified for AS Macro Assembler](software/8kbasic/8kbasic.asm)
+* [IMSAI 8K BASIC Documentation](software/8kbasic/imsai_8k_basic.pdf)
 
 ### Test Programs
 
 #### Minimal Test Code - Blink an LED 
+
 The code below blinks an LED connected to 8085's SOD output.
 The code is borrowed from [Glitch Works 8085 SBC project](http://www.glitchwrks.com/2010/09/02/8085-sbc)
 
@@ -439,6 +485,31 @@ USART_OUT:     IN      USART_CMD
                OUT     USART_DATA      ; Write character
                RET
 </code></pre>
+
+#### Files
+* [test_usart_echo.asm](software/tests/test_usart_echo.asm)
+
+### Building the Software
+
+The provided source code can be built using the [AS macroassembler](http://john.ccac.rwth-aachen.de:8000/as/)
+Here are steps to compile the code, assuming Windows host, and that AS installed in *C:\asw\* folder:
+* Build: **c:\asw\bin\asw.exe -L -cpu 8085 *filename.asm***
+  * *-L* generates listing and writes it to *filename.lst*
+  * *-cpu 8085* - specifies CPU type
+  * Output: *filename.p*
+* Generate binary image: **c:\asw\bin\p2bin *filename***
+  * Input: *filename.p*
+  * Output: *filename.bin*
+* Generate Intel HEX: **c:\asw\bin\p2hex -l 32 *filename***
+  * *-l 32* - line length - 32 bytes (default 16 bytes)
+  * Input: *filename.p*
+  * Output: *filename.hex*
+
+## 3D Printable Enclosure
+
+See [3D Printable Enclosure for MiniMax8085](printed_parts/README.md) page for the instructions, STL files, OpenSCAD source.
+
+![MiniMax8085 3D Printable Enclosure](printed_parts/MiniMax8085-Case.jpg)
 
 ## Frequently Asked Questions and Troubleshooting
 
