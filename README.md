@@ -18,6 +18,8 @@ Minimal 8085 Single Board Computer
   * [Test Programs](#test-programs)
   * [Building the Software](#building-the-software)
 * [3D Printable Enclosure](#3d-printable-enclosure)
+* [Extension Boards](#extension-boards)
+  * [Keypad and VFD Extension Board](#keypad-and-vfd-extension-board)
 * [Frequently Asked Questions and Troubleshooting](#frequently-asked-questions-and-troubleshooting)
 * [References](#references)
 
@@ -510,6 +512,12 @@ Here are steps to compile the code, assuming Windows host, and that AS installed
 See [3D Printable Enclosure for MiniMax8085](printed_parts/README.md) page for the instructions, STL files, OpenSCAD source.
 
 ![MiniMax8085 3D Printable Enclosure](printed_parts/MiniMax8085-Case.jpg)
+
+## Extension Boards
+
+### Keypad and VFD Extension Board
+
+The [Keypad and VFD (vacuum fluorescent display) extension board](https://github.com/skiselev/minimax8085-keypad-vfd) provides simple 20-key keypad and display for MiniMax8085 SBC. 
 
 ## Frequently Asked Questions and Troubleshooting
 
