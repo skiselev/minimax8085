@@ -517,7 +517,11 @@ See [3D Printable Enclosure for MiniMax8085](printed_parts/README.md) page for t
 
 ### Keypad and VFD Extension Board
 
-The [Keypad and VFD (vacuum fluorescent display) extension board](https://github.com/skiselev/minimax8085-keypad-vfd) provides simple 20-key keypad and display for MiniMax8085 SBC. 
+The [MiniMax 8085 Keypad and VFD (vacuum fluorescent display) extension board](https://github.com/skiselev/minimax8085-keypad-vfd) provides simple 20-key keypad and display for MiniMax8085 SBC.
+
+### Arithmetic and Extension Board
+
+The [MiniMax 8085 Arithmetic Processor and Extension board](https://github.com/skiselev/minimax8085-apu-ext) adds to MiniMax 8085 SBC an AMD Am9511A / Intel 8231A Arithmetic Processor Unit (APU), Intel 8255 Programmable Parallel Interface (PPI), Intel 8254 Programmable Interrupt Timer (PIT), and switchable 32 KiB SRAM, that can swapped in instead of MiniMax 8085 on-board ROM
 
 ## Frequently Asked Questions and Troubleshooting
 
